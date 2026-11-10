@@ -1,0 +1,8 @@
+.env
+server/bin/
+server/data/
+server/web/dist/*
+!server/web/dist/.gitkeep
+server/web/ui/node_modules/
+firmware/target/
+firmware/.embuild/

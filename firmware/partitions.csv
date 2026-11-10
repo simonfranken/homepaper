@@ -1,0 +1,6 @@
+# Fits any board with >= 4 MB flash. Applied and size-checked by espflash
+# (via espflash.toml); ESP-IDF never sees the Rust binary.
+# Name,    Type, SubType, Offset,   Size
+nvs,       data, nvs,     0x9000,   0x6000
+phy_init,  data, phy,     0xf000,   0x1000
+factory,   app,  factory, 0x10000,  0x300000

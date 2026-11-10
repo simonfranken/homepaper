@@ -1,0 +1,91 @@
+# Hardware
+
+*(verified)* means the fact was checked on a product page. *(to verify)* means it comes from memory or inference and must be checked before code depends on it.
+
+## Panel
+
+**Waveshare 7.5" e-Paper, 800×480, black/white** ([D-007](decisions.md#d-007)).
+
+| Property | Value | Source |
+|---|---|---|
+| Resolution | 800 × 480 | *(verified)* Waveshare product page |
+| Colors | Black/white, 4 grey levels | *(verified)* |
+| Full refresh | 4 s | *(verified)* |
+| Fast refresh | 1.5 s | *(verified)* |
+| Partial refresh | Supported, 0.4 s | *(verified)* |
+| 4-grey refresh | 2.1 s | *(verified)* |
+| Outline | 170.2 × 111.2 mm | *(verified)* |
+| Display area | 163.2 × 97.92 mm | *(verified)* |
+| Interface | SPI | *(verified)* |
+| Revision | V2 | *(to verify)*: inferred because V1 was 640×384. The product pages don't say "V2". |
+| Rust driver | `epd-waveshare` crate, module `epd7in5_v2` | *(verified, docs.rs, v0.6)*: partial refresh support *(to verify)* |
+| GxEPD2 driver class (C++ reference for init sequences) | `GxEPD2_750_T7` | *(to verify)* |
+| Ribbon-cable marking | e.g. `GDEW075T7` or `HINK-E075A01` | *(to verify)*: check when the panel arrives |
+
+### Panels considered and rejected for v1
+
+**7.5" 800×480 black/white/red ("(B)" variant).** It has no partial refresh and a full refresh takes about 15–25 s with flashing. Waveshare's guidance for color panels is also a minimum time between refreshes of roughly 3 minutes *(to verify)*. That conflicts with push updates, so it's an option for a later "accent color" version, not the prototype ([D-007](decisions.md#d-007)). The protocol stays panel-agnostic so it can be added later.
+
+## Controller: two routes
+
+See [O-001](decisions.md#o-001).
+
+> **Important:** the **raw panel** has only a ribbon (FPC) connector. You **can't** jumper it to an ESP32 dev board directly. It always needs a driver PCB: either Waveshare's driver HAT (route A) or the ESP32 driver board (route B).
+
+### Route A: HAT kit + ESP32-S3 dev board
+
+This matches the original prototype idea (S3 dev board + jumpers, [D-008](decisions.md#d-008)).
+
+- **Waveshare 7.5inch e-Paper HAT**, SKU 13504 *(verified)*. It contains the panel, a driver HAT with a 3.3 V/5 V level shifter, and a 9-pin GH1.25 cable (~20 cm) with loose wire ends *(verified)*.
+- Pins: VCC, GND, DIN, CLK, CS, DC, RST, BUSY, PWR *(verified)*. These are jumpered to the S3's SPI-capable GPIOs.
+- Price: $54.59 from Waveshare directly *(verified)*. A German shop may be preferable because of shipping and customs.
+- Pros: cheap if an S3 is already on hand, and the S3 has more RAM (plus PSRAM, depending on the board). Cons: wires and two boards in the frame.
+
+**Planned wiring for route A** ([P-008](decisions.md#p-008)). The firmware doesn't drive the panel yet. These are the pins the panel driver will use:
+
+| HAT pin | ESP32-S3 GPIO | Note |
+|---|---|---|
+| VCC | 3V3 | |
+| GND | GND | |
+| DIN (MOSI) | 11 | SPI2 (FSPI) default pins |
+| CLK (SCLK) | 12 | |
+| CS | 10 | |
+| DC | 9 | |
+| RST | 8 | |
+| BUSY | 7 | input |
+| PWR | 6 | panel power enable on newer HAT revisions, drive high |
+
+These avoid the strapping pins (0, 3, 45, 46), the USB pins (19, 20) and the pins used by octal flash/PSRAM (26–37) *(to verify against the owner's board pinout)*.
+
+### Route B: raw panel + Waveshare Universal e-Paper Driver Board ESP32
+
+- **Raw panel**: Eckstein WS13187, "7.5inch E-Ink Raw Display 800x480", €57.11 including VAT, about 8–10 days delivery *(verified, 2026-11-09)*. The listing's reviews from 2017/18 claim there's no partial refresh. They predate the 800×480 panel and are considered outdated.
+- **Driver board**: €14.90 at Berrybase, 1–3 days delivery (from the user's research).
+  - MCU: ESP32-WROOM-32 without PSRAM *(to verify)*. 520 KB SRAM is plenty for a 48 KB 1-bit frame or a 96 KB 2-bit frame.
+  - Pin mapping: GxEPD2's examples include this board and serve as a reference for our Rust pin config *(to verify)*.
+  - Has an **A/B switch** for the panel's driving resistor. Check the Waveshare wiki for the 7.5" V2 before the first power-on *(to verify)*.
+- Pros: no wiring, one compact board, tidy in a frame. Cons: ~€72 total, and the less powerful MCU.
+
+The panel is the same in both routes. A panel bought with the HAT kit can later be moved to the ESP32 driver board.
+
+Firmware keeps pin assignments in a per-board config, so both routes run the same code.
+
+## Frame build
+
+- **Frame**: 13 × 18 cm. It fits the panel's 170.2 × 111.2 mm outline.
+- **Passe-partout**: window about **163 × 98 mm**, with a few mm of overlap so the panel's border is covered. It probably needs to be cut by hand or ordered to size.
+- **Depth**: the electronics (about 48 × 29 mm for the route B board, or the S3 and HAT for route A), the ribbon cable and the USB cable need a **box frame** or a spacer behind the back panel.
+- **The ribbon cable is fragile.** Don't fold it sharply, and secure the board so it can't pull on the cable.
+- **Power**: the device needs constant USB power because it keeps a WebSocket open ([O-005](decisions.md#o-005)). A flat right-angle USB cable looks tidiest.
+
+## Shopping list (route B example)
+
+| Item | Where | Price |
+|---|---|---|
+| Waveshare Universal e-Paper Driver Board ESP32 | Berrybase | €14.90 |
+| Waveshare 7.5" 800×480 B/W raw panel (WS13187) | Eckstein | €57.11 |
+| Box frame 13×18 cm + passe-partout (cut to ~163 × 98 mm) | Any | ~€10–15 |
+| USB cable (flat, right-angle) | Any | a few € |
+| **Total** | | **~€85–90** |
+
+For route A, buy the HAT kit instead of the first two items, plus an ESP32-S3 dev board if one isn't on hand.

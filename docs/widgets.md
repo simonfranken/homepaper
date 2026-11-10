@@ -1,0 +1,47 @@
+# Widgets
+
+## Concept
+
+A **layout** belongs to one device and consists of **widget instances** placed on a grid ([P-003](decisions.md#p-003)). Each instance has:
+
+- a **kind**, which decides how it looks and what it expects;
+- **bindings** to HA entities and attributes, for the values it shows;
+- **options** specific to the kind (label, unit, decimals, icon, size variant, …);
+- a **position and size** in grid cells.
+
+Users combine widget kinds with HA values in the web UI ([D-004](decisions.md#d-004)). They don't write code.
+
+## Proposed layout grid
+
+A snap grid such as **8 × 6 cells** on 800 × 480 (100 × 80 px per cell) is proposed. It's still to be decided ([P-003](decisions.md#p-003)). Widgets declare which sizes they support (e.g. 1×1, 2×1, 2×2) and adapt their content to the space.
+
+## v1 catalogue
+
+**Implemented** in `server/internal/render/widgets.go` as `value`, `temperature`, `climate`, `weather`, `lights`, `binary`, `clock` and `text`. The editor builds its forms from the field schema at `GET /api/widgets`, so adding a field in Go is enough. Differences from the original plan:
+- **Weather** shows only the current condition, temperature and humidity. A forecast needs the `weather.get_forecasts` service call and isn't done yet.
+- **Light** is a list widget (`lights`) and works for one or more entities.
+- Every widget has a **Frame** option (a rounded border, on by default).
+- An unavailable or unknown entity is drawn as "–".
+
+
+This list comes from the initial idea: current temperature, weather, sensor data in general, light status and target temperature.
+
+| Kind | Shows | Typical bindings |
+|---|---|---|
+| **Value** (generic sensor) | One value with label, unit and optional icon | Any `sensor.*`, or an entity attribute |
+| **Temperature** | Current temperature, optionally with humidity | `sensor.*_temperature`, `sensor.*_humidity` |
+| **Climate** | Current and target temperature, HVAC mode | `climate.*` (`current_temperature`, `temperature`, `hvac_action`) |
+| **Weather** | Condition icon, temperature, short forecast | `weather.*` (forecast through the HA `weather.get_forecasts` service) |
+| **Light** | On/off state, optionally brightness. Can also list several lights | `light.*` |
+| **Binary state** | Open/closed, on/off, present/away with icon | `binary_sensor.*`, `switch.*`, `person.*` |
+| **Clock / date** | Date, time or both. The server re-renders every minute, so a time display costs one small partial refresh per minute. | none |
+| **Text / heading** | Static label or section title | none |
+
+Possible later additions: history chart or sparkline, calendar or agenda, waste collection, energy and solar, multi-entity tables, conditional widgets (shown only when e.g. a window is open).
+
+## Open points
+
+- ~~The schema for widget definitions~~: done (`render.Kind` / `render.Field`).
+- ~~How to show unavailable or unknown entity states~~: shown as "–" for now.
+- Per-widget minimum update intervals ([D-005](decisions.md#d-005)). Only a per-device minimum interval exists so far.
+- Themes, fonts and icon set (it must stay crisp at 1 bit; see [rendering.md](rendering.md)).

@@ -59,6 +59,7 @@ type Store struct {
 	listeners []func(ids []string)
 	connected bool
 	source    string
+	lastErr   string
 }
 
 func NewStore(source string) *Store {
@@ -127,12 +128,48 @@ func (s *Store) notify(ids []string) {
 func (s *Store) setConnected(c bool) {
 	s.mu.Lock()
 	s.connected = c
+	if c {
+		s.lastErr = ""
+	}
 	s.mu.Unlock()
 }
 
-// Status reports the source ("homeassistant" or "demo") and connection state.
-func (s *Store) Status() (source string, connected bool) {
+// setError records why the source is not connected, for the UI.
+func (s *Store) setError(msg string) {
+	s.mu.Lock()
+	s.lastErr = msg
+	s.mu.Unlock()
+}
+
+// reset switches the store to another source and drops all entities.
+// Listeners are not told: panels keep their frame until the new source's
+// snapshot arrives (Replace notifies) or the next minute's render, instead
+// of flashing a full frame of dashes in between.
+func (s *Store) reset(source string) {
+	s.mu.Lock()
+	s.entities = map[string]Entity{}
+	s.source = source
+	s.connected = false
+	s.lastErr = ""
+	s.mu.Unlock()
+}
+
+// Status is the state of the entity source as shown in the UI.
+type Status struct {
+	Source    string `json:"source"` // SourceDemo or SourceHA
+	Connected bool   `json:"connected"`
+	Error     string `json:"error,omitempty"` // why it is not connected
+	Entities  int    `json:"entities"`
+}
+
+const (
+	SourceDemo = "demo"
+	SourceHA   = "homeassistant"
+)
+
+// Status reports the source and its connection state.
+func (s *Store) Status() Status {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return s.source, s.connected
+	return Status{Source: s.source, Connected: s.connected, Error: s.lastErr, Entities: len(s.entities)}
 }

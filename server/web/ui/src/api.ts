@@ -6,8 +6,10 @@ export interface Field {
   key: string
   label: string
   type: FieldType
+  help?: string
+  placeholder?: string
   domains?: string[]
-  choices?: string[]
+  choices?: { value: string; label: string }[]
   default?: unknown
   required?: boolean
 }
@@ -80,7 +82,15 @@ export interface Entity {
 export interface ServerStatus {
   source: 'demo' | 'homeassistant'
   connected: boolean
+  error?: string
   entities: number
+}
+
+export interface HaSettings {
+  url: string
+  has_token: boolean
+  origin: 'ui' | 'env' | 'none'
+  status: ServerStatus
 }
 
 async function req<T>(method: string, url: string, body?: unknown): Promise<T> {
@@ -112,16 +122,23 @@ export const api = {
   resetToken: (id: string) => req<Device>('PATCH', `/api/devices/${id}`, { reset_token: true }),
   deleteDevice: (id: string) => req<void>('DELETE', `/api/devices/${id}`),
   saveLayout: (id: string, layout: Layout) => req<Device>('PUT', `/api/devices/${id}/layout`, layout),
-  previewUrl: (id: string, version: number) => `/api/devices/${id}/preview.png?v=${version}`,
+  haSettings: () => req<HaSettings>('GET', '/api/settings/ha'),
+  saveHaSettings: (url: string, token: string) => req<HaSettings>('PUT', '/api/settings/ha', { url, token }),
+  previewUrl: (id: string, version: number | string) => `/api/devices/${id}/preview.png?v=${version}`,
 }
 
 export type ServerEvent =
   | { type: 'device'; device: string }
   | { type: 'devices' }
   | { type: 'render'; device: string }
+  | { type: 'settings' }
 
 // Subscribes to server events, reconnecting with backoff. Returns a stop function.
-export function subscribe(onEvent: (e: ServerEvent) => void, onReconnect: () => void): () => void {
+export function subscribe(
+  onEvent: (e: ServerEvent) => void,
+  onReconnect: () => void,
+  onLost: () => void,
+): () => void {
   let ws: WebSocket | undefined
   let stopped = false
   let delay = 1000
@@ -134,7 +151,10 @@ export function subscribe(onEvent: (e: ServerEvent) => void, onReconnect: () => 
     }
     ws.onmessage = (m) => onEvent(JSON.parse(m.data))
     ws.onclose = () => {
-      if (!stopped) setTimeout(connect, (delay = Math.min(delay * 2, 30000)))
+      if (stopped) return
+      onLost()
+      setTimeout(connect, delay)
+      delay = Math.min(delay * 2, 15000)
     }
   }
   connect()
@@ -144,8 +164,28 @@ export function subscribe(onEvent: (e: ServerEvent) => void, onReconnect: () => 
   }
 }
 
-// The URL a device should be configured with, derived from how the UI is reached.
-export function deviceUrl(): string {
+// The URL a device should be configured with, for a given host[:port].
+export function deviceUrl(host: string): string {
   const proto = location.protocol === 'https:' ? 'wss' : 'ws'
-  return `${proto}://${location.host}/ws/device`
+  return `${proto}://${host}/ws/device`
+}
+
+// Addresses that only work on the machine the browser runs on.
+export function isLoopback(host: string): boolean {
+  const name = host.replace(/:\d+$/, '').toLowerCase()
+  return name === 'localhost' || name === '[::1]' || name.startsWith('127.')
+}
+
+// The display's setup portal (firmware/src/setup.rs). It accepts the
+// connection values as query parameters and fills its form with them.
+export const SETUP_PORTAL = 'http://192.168.71.1'
+export const SETUP_SSID = 'homepaper-setup'
+
+export function setupLink(serverUrl: string, d: Device): string {
+  const q = new URLSearchParams({ server_url: serverUrl, device_id: d.id, token: d.token })
+  return `${SETUP_PORTAL}/?${q}`
+}
+
+export function hasConnected(d: Device): boolean {
+  return d.status.connected || (!!d.last_seen && !d.last_seen.startsWith('0001'))
 }

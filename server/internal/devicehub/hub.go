@@ -5,6 +5,7 @@ package devicehub
 
 import (
 	"context"
+	"crypto/subtle"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -196,7 +197,7 @@ func (h *Hub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	dev, err := h.Store.Get(hl.DeviceID)
-	if err != nil || dev.Token != hl.Token {
+	if err != nil || subtle.ConstantTimeCompare([]byte(dev.Token), []byte(hl.Token)) != 1 {
 		h.Log.Warn("device rejected", "device", hl.DeviceID, "remote", r.RemoteAddr)
 		h.reject(ctx, conn, "unknown device or wrong token")
 		return

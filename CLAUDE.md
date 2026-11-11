@@ -57,4 +57,4 @@ espflash flash --monitor target/xtensa-esp32s3-espidf/release/homepaper-fw   # n
 
 - In docs and UI text, refer to people using homepaper as "the user" or "they".
 - Keep the device side simple. Rendering, layout, diffing and rate limiting belong on the server.
-- Don't put secrets (HA tokens, Wi-Fi credentials, device tokens) in the repo. Use `.env` (gitignored) and `.env.template`. HA settings live in `server/.env` only until the UI settings page exists (D-013).
+- Don't put secrets (HA tokens, Wi-Fi credentials, device tokens) in the repo. Use `.env` (gitignored) and `.env.template`. HA settings are entered in the web UI and saved in `homepaper.json` (D-013); `HA_URL`/`HA_TOKEN` in `server/.env` are only a fallback.

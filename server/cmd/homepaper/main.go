@@ -5,6 +5,7 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -30,8 +31,7 @@ func env(key, def string) string {
 }
 
 // loadDotEnv sets variables from a KEY=VALUE file (default .env in the
-// working directory). Variables already set in the environment win. This is
-// the interim way to configure HA until it moves into the UI (D-013).
+// working directory). Variables already set in the environment win.
 func loadDotEnv(path string) (bool, error) {
 	data, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
@@ -93,18 +93,18 @@ func run(log *slog.Logger) error {
 		return err
 	}
 
-	var states *ha.Store
-	if haURL == "" {
-		log.Warn("HA_URL not set: running with demo entities")
-		states = ha.NewStore("demo")
-		go ha.RunDemo(ctx, states)
-	} else {
-		if haToken == "" {
-			return errors.New("HA_URL is set but HA_TOKEN is empty")
-		}
-		states = ha.NewStore("homeassistant")
-		go (&ha.Client{URL: haURL, Token: haToken, Store: states, Log: log}).Run(ctx)
+	// Home Assistant settings saved in the UI win; HA_URL/HA_TOKEN are the
+	// fallback, and without either the server shows demo entities (D-013).
+	if haURL != "" && haToken == "" {
+		return errors.New("HA_URL is set but HA_TOKEN is empty")
 	}
+	if haURL != "" {
+		if haURL, err = ha.NormalizeURL(haURL); err != nil {
+			return fmt.Errorf("HA_URL: %w", err)
+		}
+	}
+	manager := ha.NewManager(ctx, log)
+	states := manager.Store
 
 	settings := devicehub.DefaultSettings()
 	if v, err := strconv.Atoi(os.Getenv("HOMEPAPER_FULL_REFRESH_EVERY")); err == nil && v > 0 {
@@ -116,7 +116,9 @@ func run(log *slog.Logger) error {
 	hub := devicehub.New(st, states, log, settings)
 
 	a := &api.API{Store: st, States: states, Hub: hub, Log: log, Web: web.Dist(),
-		Password: os.Getenv("HOMEPAPER_PASSWORD"), Location: time.Local}
+		Password: os.Getenv("HOMEPAPER_PASSWORD"), Location: time.Local,
+		HA: manager, EnvHA: store.HASettings{URL: haURL, Token: haToken}}
+	a.StartHA()
 	srv := &http.Server{Addr: listen, Handler: a.Handler(), ReadHeaderTimeout: 10 * time.Second}
 
 	go func() {

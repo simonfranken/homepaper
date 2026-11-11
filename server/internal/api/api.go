@@ -4,6 +4,7 @@ package api
 
 import (
 	"bytes"
+	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -29,6 +30,10 @@ type API struct {
 	Web      fs.FS // built frontend (may lack index.html in dev)
 	Password string
 	Location *time.Location
+	// HA switches the entity source at runtime. EnvHA is the connection
+	// from HA_URL/HA_TOKEN, used while nothing is saved in the UI (D-013).
+	HA    *ha.Manager
+	EnvHA store.HASettings
 
 	events *broadcaster
 
@@ -56,6 +61,9 @@ func (a *API) Handler() http.Handler {
 	api.HandleFunc("DELETE /api/devices/{id}", a.deleteDevice)
 	api.HandleFunc("PUT /api/devices/{id}/layout", a.putLayout)
 	api.HandleFunc("GET /api/devices/{id}/preview.png", a.preview)
+	api.HandleFunc("GET /api/settings/ha", a.getHA)
+	api.HandleFunc("PUT /api/settings/ha", a.putHA)
+	api.HandleFunc("GET /api/fonts/{name}", a.font)
 	api.HandleFunc("GET /api/events", a.events.serve)
 	api.Handle("/", a.frontend())
 	mux.Handle("/", a.auth(api))
@@ -69,7 +77,7 @@ func (a *API) auth(next http.Handler) http.Handler {
 		return next
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if _, p, ok := r.BasicAuth(); !ok || p != a.Password {
+		if _, p, ok := r.BasicAuth(); !ok || subtle.ConstantTimeCompare([]byte(p), []byte(a.Password)) != 1 {
 			w.Header().Set("WWW-Authenticate", `Basic realm="homepaper"`)
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
@@ -111,8 +119,18 @@ func writeErr(w http.ResponseWriter, err error) {
 }
 
 func (a *API) status(w http.ResponseWriter, r *http.Request) {
-	source, connected := a.States.Status()
-	writeJSON(w, http.StatusOK, map[string]any{"source": source, "connected": connected, "entities": len(a.States.All())})
+	writeJSON(w, http.StatusOK, a.States.Status())
+}
+
+func (a *API) font(w http.ResponseWriter, r *http.Request) {
+	data, ok := render.FontFile(r.PathValue("name"))
+	if !ok {
+		http.NotFound(w, r)
+		return
+	}
+	w.Header().Set("Content-Type", "font/ttf")
+	w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+	_, _ = w.Write(data)
 }
 
 func (a *API) widgets(w http.ResponseWriter, r *http.Request) {
@@ -166,13 +184,35 @@ func (a *API) createDevice(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, err)
 		return
 	}
-	d, err := a.Store.Create(strings.TrimSpace(body.ID), strings.TrimSpace(body.Name))
+	d, err := a.Store.Create(strings.TrimSpace(body.ID), strings.TrimSpace(body.Name), a.starterLayout())
 	if err != nil {
 		writeErr(w, err)
 		return
 	}
 	a.events.send(map[string]string{"type": "devices"})
 	writeJSON(w, http.StatusCreated, a.dto(d))
+}
+
+// starterLayout is the example layout without the widgets whose entities
+// the current source does not have. With demo data that is the full example;
+// with a real Home Assistant it is usually the date and a heading, which
+// beats a panel full of dashes.
+func (a *API) starterLayout() store.Layout {
+	l := store.ExampleLayout()
+	kept := l.Widgets[:0]
+	for _, wg := range l.Widgets {
+		ok := true
+		for id := range devicehub.ReferencedEntities(store.Layout{Widgets: []store.Widget{wg}}) {
+			if _, found := a.States.Get(id); !found {
+				ok = false
+			}
+		}
+		if ok {
+			kept = append(kept, wg)
+		}
+	}
+	l.Widgets = kept
+	return l
 }
 
 func (a *API) patchDevice(w http.ResponseWriter, r *http.Request) {

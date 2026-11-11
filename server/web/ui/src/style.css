@@ -1,30 +1,89 @@
+/*
+  homepaper editor.
+
+  One rule drives the palette: black is what the panel prints, blue is what
+  only the editor shows. Print designers mark up layouts in non-photo blue
+  because it does not reproduce; selection, guides and every control that
+  acts on the layout use it here for the same reason. Greys are cool, so the
+  white panel preview is the warmest, brightest thing on the page.
+
+  Text is set in the Go typeface, served by the Go server from the same font
+  data the renderer draws the panel with.
+*/
+
+@font-face {
+  font-family: 'Go';
+  src: url('/api/fonts/go-regular.ttf') format('truetype');
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Go';
+  src: url('/api/fonts/go-medium.ttf') format('truetype');
+  font-weight: 500;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Go';
+  src: url('/api/fonts/go-bold.ttf') format('truetype');
+  font-weight: 700;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Go Mono';
+  src: url('/api/fonts/go-mono.ttf') format('truetype');
+  font-weight: 400;
+  font-display: swap;
+}
+
 :root {
-  --bg: #f4f1ea;
-  --paper: #fffdf8;
-  --ink: #1d1b18;
-  --muted: #6b665d;
-  --rule: #d9d3c7;
-  --accent: #2f5d50;
-  --ok: #2f7d4f;
-  --warn: #a8641a;
-  --bad: #a83232;
-  --radius: 8px;
-  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --desk: #e3e8eb;
+  --sheet: #f8fafb;
+  --ink: #14191c;
+  --muted: #55616a;
+  --rule: #c2cbd1;
+  --rule-soft: #d7dee2;
+  --blue: #1269b8;
+  --blue-strong: #0d5496;
+  --blue-wash: #d9eaf7;
+  --on-blue: #ffffff;
+  --ok: #1b7f47;
+  --warn: #9a5b00;
+  --warn-wash: #fbeccd;
+  --bad: #b3312a;
+  --bezel: #23282b;
+
+  --text-s: 13px;
+  --text-m: 15px;
+  --text-l: 18px;
+  --text-xl: 24px;
+  --radius: 4px;
+
+  font-family: 'Go', system-ui, sans-serif;
+  font-size: var(--text-m);
+  line-height: 1.45;
   color: var(--ink);
-  background: var(--bg);
+  background: var(--desk);
+  color-scheme: light dark;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #171614;
-    --paper: #211f1c;
-    --ink: #ece8df;
-    --muted: #a39d92;
-    --rule: #3a3631;
-    --accent: #7fb8a5;
-    --ok: #6cc28f;
-    --warn: #e0a560;
-    --bad: #e07a7a;
+    --desk: #12171a;
+    --sheet: #1b2226;
+    --ink: #e7edf0;
+    --muted: #98a5ad;
+    --rule: #3a454c;
+    --rule-soft: #2a3338;
+    --blue: #62b2ee;
+    --blue-strong: #8cc7f4;
+    --blue-wash: #17354d;
+    --on-blue: #0b1a26;
+    --ok: #5cc48a;
+    --warn: #e5ac55;
+    --warn-wash: #3d2e10;
+    --bad: #ee8079;
+    --bezel: #050708;
   }
 }
 
@@ -34,73 +93,166 @@
 
 body {
   margin: 0;
-  background: var(--bg);
+  background: var(--desk);
 }
 
 h1,
 h2,
-h3 {
-  font-family: Georgia, 'Times New Roman', serif;
-  font-weight: 700;
+h3,
+p {
   margin: 0;
 }
 
-button {
+h2 {
+  font-size: var(--text-xl);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+}
+
+h3 {
+  font-size: var(--text-m);
+  font-weight: 700;
+}
+
+a {
+  color: var(--blue);
+}
+
+button,
+.button {
   font: inherit;
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 5px 12px;
   border: 1px solid var(--rule);
-  background: var(--paper);
+  border-radius: var(--radius);
+  background: var(--sheet);
   color: var(--ink);
-  padding: 6px 12px;
-  border-radius: 6px;
+  text-decoration: none;
   cursor: pointer;
 }
 
-button:hover {
-  border-color: var(--accent);
+button:hover:not(:disabled),
+.button:hover {
+  border-color: var(--blue);
+  color: var(--blue-strong);
 }
 
-button.primary {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: var(--paper);
+button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+button.primary,
+.button.primary {
+  background: var(--blue);
+  border-color: var(--blue);
+  color: var(--on-blue);
+}
+
+button.primary:hover:not(:disabled),
+.button.primary:hover {
+  background: var(--blue-strong);
+  border-color: var(--blue-strong);
+  color: var(--on-blue);
 }
 
 button.danger {
   color: var(--bad);
 }
 
+button.danger:hover:not(:disabled) {
+  border-color: var(--bad);
+  color: var(--bad);
+}
+
+button.quiet {
+  border-color: transparent;
+  background: none;
+}
+
+button.small {
+  min-height: 28px;
+  padding: 2px 9px;
+  font-size: var(--text-s);
+}
+
 input,
 select {
   font: inherit;
   width: 100%;
-  padding: 6px 8px;
+  min-height: 34px;
+  padding: 5px 9px;
   border: 1px solid var(--rule);
-  border-radius: 6px;
-  background: var(--paper);
+  border-radius: var(--radius);
+  background: var(--sheet);
   color: var(--ink);
+}
+
+input::placeholder {
+  color: var(--muted);
+  opacity: 0.8;
+}
+
+input[type='checkbox'] {
+  width: 16px;
+  height: 16px;
+  min-height: 0;
+  accent-color: var(--blue);
+}
+
+:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 1px;
 }
 
 label {
   display: block;
-  font-size: 13px;
-  color: var(--muted);
+  font-size: var(--text-s);
+  font-weight: 500;
   margin-bottom: 4px;
 }
 
-.card {
-  background: var(--paper);
+kbd {
+  font: inherit;
+  font-size: 12px;
+  padding: 0 5px;
   border: 1px solid var(--rule);
-  border-radius: var(--radius);
-  padding: 16px;
+  border-bottom-width: 2px;
+  border-radius: 3px;
+  background: var(--sheet);
+  white-space: nowrap;
+}
+
+dialog {
+  width: min(460px, calc(100vw - 32px));
+  padding: 24px;
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  background: var(--sheet);
+  color: var(--ink);
+}
+
+dialog::backdrop {
+  background: rgb(10 16 20 / 0.45);
 }
 
 .muted {
   color: var(--muted);
 }
 
+.small {
+  font-size: var(--text-s);
+}
+
 .mono {
-  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
-  font-size: 13px;
+  font-family: 'Go Mono', ui-monospace, Menlo, monospace;
+  font-size: var(--text-s);
   word-break: break-all;
 }
 
@@ -109,23 +261,40 @@ label {
   width: 9px;
   height: 9px;
   border-radius: 50%;
-  background: var(--rule);
+  border: 1.5px solid var(--muted);
   flex: none;
 }
 
 .dot.ok {
   background: var(--ok);
+  border-color: var(--ok);
 }
 
 .dot.warn {
   background: var(--warn);
+  border-color: var(--warn);
 }
 
 .dot.bad {
   background: var(--bad);
+  border-color: var(--bad);
 }
 
 .error {
   color: var(--bad);
-  font-size: 13px;
+  font-size: var(--text-s);
+}
+
+.notice {
+  padding: 8px 12px;
+  border-left: 3px solid var(--warn);
+  background: var(--warn-wash);
+  font-size: var(--text-s);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+    animation: none !important;
+  }
 }

@@ -1,6 +1,10 @@
 //! Setup portal: an open Wi-Fi access point "homepaper-setup" with a form at
 //! http://192.168.71.1 for Wi-Fi credentials, server URL, device ID and
 //! token. Saving stores the values in NVS and restarts the device.
+//!
+//! The server's web UI links to the form with `server_url`, `device_id` and
+//! `token` as query parameters. The form then arrives filled in and the user
+//! only chooses their Wi-Fi.
 
 use std::convert::Infallible;
 use std::sync::{Arc, Mutex};
@@ -51,7 +55,12 @@ pub fn run(
     {
         let current = current.clone();
         server.fn_handler("/", Method::Get, move |req| -> Result<()> {
-            let html = page(&current.lock().unwrap(), &networks, None);
+            let mut c = current.lock().unwrap().clone();
+            let prefilled = match req.uri().split_once('?') {
+                Some((_, query)) => apply_form(&mut c, query),
+                None => false,
+            };
+            let html = page(&c, &networks, None, prefilled);
             req.into_response(200, None, &[("Content-Type", "text/html; charset=utf-8")])?
                 .write_all(html.as_bytes())?;
             Ok(())
@@ -69,19 +78,9 @@ pub fn run(
             body.extend_from_slice(&buf[..n]);
         }
         let mut c = current.lock().unwrap().clone();
-        for (k, v) in parse_form(&String::from_utf8_lossy(&body)) {
-            match k.as_str() {
-                "wifi_ssid" => c.wifi_ssid = v.trim().into(),
-                // Secrets are never shown; an empty field keeps the saved value.
-                "wifi_pass" if !v.is_empty() => c.wifi_pass = v,
-                "token" if !v.trim().is_empty() => c.token = v.trim().into(),
-                "server_url" => c.server_url = v.trim().into(),
-                "device_id" => c.device_id = v.trim().into(),
-                _ => {}
-            }
-        }
+        apply_form(&mut c, &String::from_utf8_lossy(&body));
         if !c.is_complete() {
-            let html = page(&c, &[], Some("Please fill in Wi-Fi network, server URL, device ID and token."));
+            let html = page(&c, &[], Some("Please fill in Wi-Fi network, server URL, device ID and token."), false);
             req.into_response(400, None, &[("Content-Type", "text/html; charset=utf-8")])?
                 .write_all(html.as_bytes())?;
             return Ok(());
@@ -119,30 +118,70 @@ fn scan(wifi: &mut BlockingWifi<EspWifi<'static>>) -> Result<Vec<String>> {
     Ok(names)
 }
 
-fn page(c: &Config, networks: &[String], error: Option<&str>) -> String {
+/// Applies form fields (a POST body or a query string) to `c`. Returns
+/// whether any connection value was set.
+fn apply_form(c: &mut Config, form: &str) -> bool {
+    let mut changed = false;
+    for (k, v) in parse_form(form) {
+        match k.as_str() {
+            "wifi_ssid" => c.wifi_ssid = v.trim().into(),
+            // Secrets are never shown; an empty field keeps the saved value.
+            "wifi_pass" if !v.is_empty() => c.wifi_pass = v,
+            "token" if !v.trim().is_empty() => {
+                c.token = v.trim().into();
+                changed = true;
+            }
+            "server_url" => {
+                c.server_url = v.trim().into();
+                changed = true;
+            }
+            "device_id" => {
+                c.device_id = v.trim().into();
+                changed = true;
+            }
+            _ => {}
+        }
+    }
+    changed
+}
+
+/// Renders the form. With `prefilled`, the connection values came from the
+/// link in the server's web UI: the token is carried in a hidden field (it is
+/// not saved yet) and the page says that only Wi-Fi is left to enter.
+fn page(c: &Config, networks: &[String], error: Option<&str>, prefilled: bool) -> String {
     let options: String = networks.iter().map(|n| format!("<option value=\"{}\">", esc(n))).collect();
     let error = error.map(|e| format!("<p class=err>{}</p>", esc(e))).unwrap_or_default();
     let pass_hint = if c.wifi_pass.is_empty() { "" } else { " placeholder=\"(unchanged)\"" };
     let token_attrs = if c.token.is_empty() { " required" } else { " placeholder=\"(unchanged)\"" };
+    let token_field = if prefilled && !c.token.is_empty() {
+        format!("<input name=token type=hidden value=\"{}\">", esc(&c.token))
+    } else {
+        format!("<label for=token>Token</label><input id=token name=token type=password autocomplete=off{token_attrs}>")
+    };
+    let intro = if prefilled {
+        "The server details are filled in. Choose your Wi-Fi network, enter its password and save."
+    } else {
+        "Connect this display to Wi-Fi and to your homepaper server. The server's web UI shows the server URL, device ID and token under Display."
+    };
     format!(
         r#"<!doctype html><html><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1">
 <title>homepaper setup</title><style>
-body{{font-family:system-ui,sans-serif;background:#f4f1ea;color:#1d1b18;margin:0;padding:16px}}
-main{{max-width:420px;margin:0 auto;background:#fffdf8;border:1px solid #d9d3c7;border-radius:8px;padding:20px}}
-h1{{font-family:Georgia,serif;margin:0 0 4px}}p{{color:#6b665d;margin:0 0 16px}}
-label{{display:block;font-size:14px;color:#6b665d;margin:12px 0 4px}}
-input{{width:100%;box-sizing:border-box;padding:8px;font-size:16px;border:1px solid #d9d3c7;border-radius:6px}}
-button{{margin-top:20px;width:100%;padding:10px;font-size:16px;background:#2f5d50;color:#fff;border:0;border-radius:6px}}
-.err{{color:#a83232}}
+body{{font-family:system-ui,sans-serif;background:#e3e8eb;color:#14191c;margin:0;padding:16px;line-height:1.45}}
+main{{max-width:420px;margin:0 auto;background:#f8fafb;border:1px solid #c2cbd1;border-radius:6px;padding:20px}}
+h1{{font-size:22px;margin:0 0 6px}}p{{color:#55616a;margin:0 0 16px}}
+label{{display:block;font-size:14px;font-weight:600;margin:14px 0 4px}}
+input{{width:100%;box-sizing:border-box;padding:9px;font-size:16px;border:1px solid #c2cbd1;border-radius:4px;background:#fff;color:inherit}}
+button{{margin-top:22px;width:100%;padding:11px;font-size:16px;font-weight:600;background:#1269b8;color:#fff;border:0;border-radius:4px}}
+.err{{color:#b3312a}}
 </style></head><body><main>
-<h1>homepaper</h1><p>Connect this display to Wi-Fi and to your homepaper server. Device ID and token are shown in the server's web UI.</p>
+<h1>homepaper setup</h1><p>{intro}</p>
 {error}
 <form method=post action=/save>
-<label>Wi-Fi network</label><input name=wifi_ssid list=nets value="{ssid}" required><datalist id=nets>{options}</datalist>
-<label>Wi-Fi password</label><input name=wifi_pass type=password{pass_hint}>
-<label>Server URL</label><input name=server_url value="{url}" placeholder="ws://192.168.1.10:8080/ws/device" required>
-<label>Device ID</label><input name=device_id value="{id}" required>
-<label>Token</label><input name=token type=password{token_attrs}>
+<label for=ssid>Wi-Fi network</label><input id=ssid name=wifi_ssid list=nets value="{ssid}" autocapitalize=none autocorrect=off required><datalist id=nets>{options}</datalist>
+<label for=pass>Wi-Fi password</label><input id=pass name=wifi_pass type=password{pass_hint}>
+<label for=url>Server URL</label><input id=url name=server_url value="{url}" placeholder="ws://192.168.1.10:8080/ws/device" autocapitalize=none autocorrect=off required>
+<label for=id>Device ID</label><input id=id name=device_id value="{id}" autocapitalize=none autocorrect=off required>
+{token_field}
 <button>Save and restart</button>
 </form></main></body></html>"#,
         ssid = esc(&c.wifi_ssid),
@@ -152,7 +191,7 @@ button{{margin-top:20px;width:100%;padding:10px;font-size:16px;background:#2f5d5
 }
 
 const SAVED_PAGE: &str = r#"<!doctype html><html><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>homepaper</title></head>
-<body style="font-family:system-ui,sans-serif;padding:24px"><h1>Saved</h1><p>The display restarts and connects to your Wi-Fi. You can close this page.</p></body></html>"#;
+<body style="font-family:system-ui,sans-serif;padding:24px;line-height:1.45"><h1>Saved</h1><p>The display restarts and joins your Wi-Fi. Switch this device back to your own network; the display then shows up as online in the homepaper web UI.</p><p>If it doesn't within a minute, the Wi-Fi password was probably wrong. The setup network comes back by itself so you can try again.</p></body></html>"#;
 
 fn esc(s: &str) -> String {
     s.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;").replace('"', "&quot;")

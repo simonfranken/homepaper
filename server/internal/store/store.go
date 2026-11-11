@@ -65,14 +65,23 @@ var idPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,31}$`)
 // digits, dashes; max 32 chars).
 func ValidID(id string) bool { return idPattern.MatchString(id) }
 
+// HASettings is the Home Assistant connection as saved from the UI (D-013).
+// An empty URL means nothing is saved.
+type HASettings struct {
+	URL   string `json:"url"`
+	Token string `json:"token"`
+}
+
 type Store struct {
 	path    string
 	mu      sync.RWMutex
 	devices map[string]*Device
+	ha      HASettings
 }
 
 type fileFormat struct {
-	Devices []*Device `json:"devices"`
+	HA      *HASettings `json:"home_assistant,omitempty"`
+	Devices []*Device   `json:"devices"`
 }
 
 func Open(path string) (*Store, error) {
@@ -91,12 +100,19 @@ func Open(path string) (*Store, error) {
 	for _, d := range f.Devices {
 		s.devices[d.ID] = d
 	}
+	if f.HA != nil {
+		s.ha = *f.HA
+	}
 	return s, nil
 }
 
 // save writes atomically. Caller holds mu.
 func (s *Store) save() error {
 	f := fileFormat{Devices: s.sortedLocked()}
+	if s.ha.URL != "" {
+		ha := s.ha
+		f.HA = &ha
+	}
 	data, err := json.MarshalIndent(f, "", "  ")
 	if err != nil {
 		return err
@@ -147,8 +163,28 @@ func newToken() string {
 	return hex.EncodeToString(b)
 }
 
-// Create adds a device with a fresh token and an example layout.
-func (s *Store) Create(id, name string) (Device, error) {
+// HA returns the saved Home Assistant settings.
+func (s *Store) HA() HASettings {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.ha
+}
+
+// SetHA saves the Home Assistant settings; a zero value clears them.
+func (s *Store) SetHA(h HASettings) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	old := s.ha
+	s.ha = h
+	if err := s.save(); err != nil {
+		s.ha = old
+		return err
+	}
+	return nil
+}
+
+// Create adds a device with a fresh token and the given starting layout.
+func (s *Store) Create(id, name string, layout Layout) (Device, error) {
 	if !ValidID(id) {
 		return Device{}, errors.New("invalid device id: use lowercase letters, digits and dashes (max 32)")
 	}
@@ -160,9 +196,13 @@ func (s *Store) Create(id, name string) (Device, error) {
 	if name == "" {
 		name = id
 	}
-	d := &Device{ID: id, Name: name, Token: newToken(), Panel: DefaultPanel, Layout: ExampleLayout(), CreatedAt: time.Now()}
+	d := &Device{ID: id, Name: name, Token: newToken(), Panel: DefaultPanel, Layout: layout, CreatedAt: time.Now()}
 	s.devices[id] = d
-	return *d, s.save()
+	if err := s.save(); err != nil {
+		delete(s.devices, id)
+		return Device{}, err
+	}
+	return *d, nil
 }
 
 func (s *Store) Delete(id string) error {
@@ -188,7 +228,7 @@ func (s *Store) Update(id string, fn func(d *Device)) (Device, error) {
 }
 
 // ExampleLayout is what a new device starts with. Entity IDs match the demo
-// source; with a real HA they show as "unavailable" until rebound.
+// source; the API drops the widgets whose entities a real HA does not have.
 func ExampleLayout() Layout {
 	return Layout{
 		Cols: DefaultCols,

@@ -20,7 +20,9 @@ A snap grid such as **8 × 6 cells** on 800 × 480 (100 × 80 px per cell) is pr
 **Implemented** in `server/internal/render/widgets.go` as `value`, `temperature`, `climate`, `weather`, `lights`, `binary`, `clock` and `text`. The editor builds its forms from the field schema at `GET /api/widgets`, so adding a field in Go is enough. Differences from the original plan:
 - **Weather** shows only the current condition, temperature and humidity. A forecast needs the `weather.get_forecasts` service call and isn't done yet.
 - **Light** is a list widget (`lights`) and works for one or more entities.
-- Every widget has a **Frame** option (a rounded border, on by default).
+- Every widget has a **frame** option ("Draw a frame around it", a rounded border, on by default).
+- Fields can carry a `placeholder` (what an empty input means) and a one-line `help`; select `choices` are `{value, label}` pairs, so the editor shows "Date and time (Mon 2 Jan, 15:04)" instead of `datetime`. An empty **Decimals** shows the value as HA reports it.
+- The editor flags widgets whose required entity is missing or unknown, on the preview and in the form, instead of leaving the user to puzzle over a dash.
 - An unavailable or unknown entity is drawn as "–".
 
 

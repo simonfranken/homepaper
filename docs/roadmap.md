@@ -2,12 +2,12 @@
 
 Each milestone ends with something you can run and see. The order is chosen so the riskiest parts (panel, board, server → device path) are proven first.
 
-## Status (2026-11-10)
+## Status (2026-11-11)
 
 Built and tested **without a panel**:
 - **Server:** HA client (tested against a real HA on 2026-11-10: initial states, live `state_changed` events, entity picker in the editor, partial frames to `fakedevice`), demo mode, renderer, region diff, device hub, REST API, Docker image.
-- **Editor UI:** tested in headless Chromium and in Chrome against a real HA.
-- **Firmware:** setup portal, Wi-Fi, WebSocket, framebuffer, acks, `NullPanel` with ASCII-art output. It compiles, but **hasn't run on the ESP32-S3 yet**.
+- **Editor UI:** tested in headless Chromium and in Chrome against a real HA. Reworked on 2026-11-11 (tested in Chrome with demo data and `fakedevice`): displays as tabs with a Layout/Display switch, a searchable entity picker, undo/redo, keyboard moves and resizing, flags for widgets without an entity, a guided connect flow, and the HA settings dialog. The HA dialog was tested against a fake HA in `internal/api` tests, **not yet against a real HA**.
+- **Firmware:** setup portal, Wi-Fi, WebSocket, framebuffer, acks, `NullPanel` with ASCII-art output. It compiles, but **hasn't run on the ESP32-S3 yet**. The setup portal's prefill link (2026-11-11) is untested on hardware too.
 - **Protocol:** verified end to end with `server/cmd/fakedevice`.
 
 Next: flash the S3 and check the connection and setup on real hardware, then order the panel ([P-008](decisions.md#p-008)) and write the panel driver (the rest of M0, then M1).
@@ -35,7 +35,7 @@ Next: flash the S3 and check the connection and setup on real hardware, then ord
 ## M3: layout editor
 
 - Web UI: device management, grid editor, widget picker, entity binding, live preview from the same renderer. *(Done in the prototype.)*
-- **Settings page for the HA URL and token** ([D-013](decisions.md#d-013)): test the connection, store it server-side, reconnect without a restart. This replaces the interim `server/.env`.
+- **Settings page for the HA URL and token** ([D-013](decisions.md#d-013)): test the connection, store it server-side, reconnect without a restart. *(Done 2026-11-11; `server/.env` remains as a fallback.)*
 - Storage for devices and layouts.
 - **Done when** a layout built entirely in the UI appears on the panel.
 

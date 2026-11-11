@@ -18,14 +18,22 @@ const (
 	FieldBool     FieldType = "bool"
 )
 
+// Choice is one option of a select field.
+type Choice struct {
+	Value string `json:"value"`
+	Label string `json:"label"`
+}
+
 type Field struct {
-	Key      string    `json:"key"`
-	Label    string    `json:"label"`
-	Type     FieldType `json:"type"`
-	Domains  []string  `json:"domains,omitempty"`
-	Choices  []string  `json:"choices,omitempty"`
-	Default  any       `json:"default,omitempty"`
-	Required bool      `json:"required,omitempty"`
+	Key         string    `json:"key"`
+	Label       string    `json:"label"`
+	Type        FieldType `json:"type"`
+	Help        string    `json:"help,omitempty"`        // one line shown under the input
+	Placeholder string    `json:"placeholder,omitempty"` // what an empty input means
+	Domains     []string  `json:"domains,omitempty"`
+	Choices     []Choice  `json:"choices,omitempty"`
+	Default     any       `json:"default,omitempty"`
+	Required    bool      `json:"required,omitempty"`
 }
 
 // Kind is a widget kind as exposed to the editor.
@@ -42,8 +50,8 @@ type Kind struct {
 	render func(c *ctx, r rect)
 }
 
-var borderField = Field{Key: "border", Label: "Frame", Type: FieldBool, Default: true}
-var labelField = Field{Key: "label", Label: "Label (empty = entity name)", Type: FieldText}
+var borderField = Field{Key: "border", Label: "Draw a frame around it", Type: FieldBool, Default: true}
+var labelField = Field{Key: "label", Label: "Label", Type: FieldText, Placeholder: "Entity name"}
 
 var kinds = map[string]*Kind{}
 
@@ -64,22 +72,24 @@ func register(k *Kind) {
 
 func init() {
 	register(&Kind{
-		Name: "value", Label: "Value", Description: "Any sensor value with label and unit.",
+		Name: "value", Label: "Value", Description: "Any sensor reading with a label and unit.",
 		MinW: 1, MinH: 1, DefaultW: 2, DefaultH: 1,
 		Fields: []Field{
 			{Key: "entity", Label: "Entity", Type: FieldEntity, Required: true},
 			labelField,
-			{Key: "unit", Label: "Unit (empty = from entity)", Type: FieldText},
-			{Key: "decimals", Label: "Decimals (-1 = as is)", Type: FieldNumber, Default: -1},
+			{Key: "unit", Label: "Unit", Type: FieldText, Placeholder: "From the entity"},
+			{Key: "decimals", Label: "Decimals", Type: FieldNumber, Placeholder: "As reported",
+				Help: "Leave empty to show the value as Home Assistant reports it."},
 		},
 		render: renderValue,
 	})
 	register(&Kind{
-		Name: "temperature", Label: "Temperature", Description: "Temperature with optional humidity.",
+		Name: "temperature", Label: "Temperature", Description: "A temperature in large digits, with humidity if you like.",
 		MinW: 1, MinH: 1, DefaultW: 2, DefaultH: 2,
 		Fields: []Field{
 			{Key: "entity", Label: "Temperature sensor", Type: FieldEntity, Domains: []string{"sensor"}, Required: true},
-			{Key: "humidity_entity", Label: "Humidity sensor", Type: FieldEntity, Domains: []string{"sensor"}},
+			{Key: "humidity_entity", Label: "Humidity sensor", Type: FieldEntity, Domains: []string{"sensor"},
+				Help: "Optional. Shown below the temperature when the widget is tall enough."},
 			labelField,
 		},
 		render: renderTemperature,
@@ -103,16 +113,16 @@ func init() {
 		render: renderWeather,
 	})
 	register(&Kind{
-		Name: "lights", Label: "Lights", Description: "On/off state of one or more lights.",
+		Name: "lights", Label: "Lights", Description: "Which lights are on, and how bright.",
 		MinW: 2, MinH: 1, DefaultW: 3, DefaultH: 2,
 		Fields: []Field{
 			{Key: "entities", Label: "Lights", Type: FieldEntities, Domains: []string{"light", "switch"}, Required: true},
-			{Key: "label", Label: "Label", Type: FieldText},
+			{Key: "label", Label: "Heading", Type: FieldText, Placeholder: "None"},
 		},
 		render: renderLights,
 	})
 	register(&Kind{
-		Name: "binary", Label: "State", Description: "Open/closed, on/off, home/away.",
+		Name: "binary", Label: "State", Description: "Open or closed, on or off, home or away.",
 		MinW: 1, MinH: 1, DefaultW: 2, DefaultH: 1,
 		Fields: []Field{
 			{Key: "entity", Label: "Entity", Type: FieldEntity, Domains: []string{"binary_sensor", "switch", "input_boolean", "person", "light", "lock", "cover"}, Required: true},
@@ -121,10 +131,11 @@ func init() {
 		render: renderBinary,
 	})
 	register(&Kind{
-		Name: "clock", Label: "Date / time", Description: "Date and/or time of the last render (updates once a minute).",
+		Name: "clock", Label: "Date / time", Description: "Today's date, the time, or both. Updates once a minute.",
 		MinW: 1, MinH: 1, DefaultW: 4, DefaultH: 1,
 		Fields: []Field{
-			{Key: "format", Label: "Format", Type: FieldSelect, Choices: []string{"date", "time", "datetime"}, Default: "date"},
+			{Key: "format", Label: "Format", Type: FieldSelect, Default: "date", Choices: []Choice{
+				{"date", "Date (Monday, 2 January)"}, {"time", "Time (15:04)"}, {"datetime", "Date and time (Mon 2 Jan, 15:04)"}}},
 		},
 		render: renderClock,
 	})
@@ -133,7 +144,8 @@ func init() {
 		MinW: 1, MinH: 1, DefaultW: 2, DefaultH: 1,
 		Fields: []Field{
 			{Key: "text", Label: "Text", Type: FieldText, Required: true},
-			{Key: "size", Label: "Size", Type: FieldSelect, Choices: []string{"small", "medium", "large"}, Default: "medium"},
+			{Key: "size", Label: "Size", Type: FieldSelect, Default: "medium", Choices: []Choice{
+				{"small", "Small"}, {"medium", "Medium"}, {"large", "Large"}}},
 		},
 		render: renderText,
 	})

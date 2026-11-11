@@ -12,5 +12,7 @@ CONFIG_MBEDTLS_CERTIFICATE_BUNDLE=y
 CONFIG_MBEDTLS_CERTIFICATE_BUNDLE_DEFAULT_CMN=y
 CONFIG_MBEDTLS_DYNAMIC_BUFFER=y
 
-# Setup portal: allow the HTTP server to accept a full form POST
-CONFIG_HTTPD_MAX_REQ_HDR_LEN=1024
+# Setup portal: room for a phone browser's request headers, and for the
+# prefill link from the web UI (/?server_url=…&device_id=…&token=…)
+CONFIG_HTTPD_MAX_REQ_HDR_LEN=2048
+CONFIG_HTTPD_MAX_URI_LEN=1024

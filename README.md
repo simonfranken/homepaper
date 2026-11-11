@@ -23,7 +23,7 @@ Home Assistant ──WS API──► homepaper server ──WS (binary frames)�
 
 ## Status
 
-The server, editor and firmware are built. The panel hasn't been bought yet, so the firmware uses a stand-in panel that prints frames as ASCII art to the serial monitor. See [roadmap](docs/roadmap.md#status-2026-11-10).
+The server, editor and firmware are built. The panel hasn't been bought yet, so the firmware uses a stand-in panel that prints frames as ASCII art to the serial monitor. See [roadmap](docs/roadmap.md#status-2026-11-11).
 
 ## Quick start: server
 
@@ -34,16 +34,11 @@ cd server
 make run                 # builds the UI and server, runs with demo entities on :8080
 ```
 
-Open http://localhost:8080 and add a display. You get a **device ID** and **token** for the device's setup page.
+Open http://localhost:8080 and add a display. You can lay it out right away with demo data. The **Display** tab walks you through connecting the panel and links to its setup page with the server address, device ID and token filled in.
 
-To use your Home Assistant, create a long-lived access token (HA profile → Security → Long-lived access tokens), then:
+To use your Home Assistant, create a long-lived access token (HA profile → Security → Long-lived access tokens) and click **Connect Home Assistant** in the header. The server tests the connection, saves it in `homepaper.json` and switches over without a restart. The token is never shown again.
 
-```sh
-cp .env.template .env    # fill in HA_URL and HA_TOKEN
-make run
-```
-
-The server reads `.env` from its working directory; real environment variables take precedence. Entering these in the web UI instead is planned ([D-013](docs/decisions.md#d-013)).
+For headless setups, `HA_URL` and `HA_TOKEN` also work, from the environment or from `.env` in the working directory (`cp .env.template .env`). Settings saved in the UI take precedence over them; remove the connection in the UI to use the environment again ([D-013](docs/decisions.md#d-013)).
 
 Or with Docker:
 
@@ -56,11 +51,11 @@ docker run -d -p 8080:8080 -v homepaper-data:/data --env-file .env homepaper
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `HA_URL`, `HA_TOKEN` | unset | Home Assistant base URL and long-lived token. If `HA_URL` isn't set, **demo mode** is used. |
+| `HA_URL`, `HA_TOKEN` | unset | Fallback Home Assistant connection, used while none is saved in the UI. Without either, **demo mode** is used. |
 | `HOMEPAPER_ENV_FILE` | `.env` | File to load the settings in this table from |
 | `HOMEPAPER_LISTEN` | `:8080` | Listen address |
 | `HOMEPAPER_DATA` | `data` (`/data` in Docker) | Directory for `homepaper.json` |
-| `HOMEPAPER_PASSWORD` | unset | Turns on HTTP basic auth for the UI and API (any username) |
+| `HOMEPAPER_PASSWORD` | unset | Turns on HTTP basic auth for the UI and API (any username). Without it, anyone on the network can edit layouts and the HA connection. |
 | `HOMEPAPER_MIN_INTERVAL` | `3s` | Minimum time between frames to one device |
 | `HOMEPAPER_FULL_REFRESH_EVERY` | `20` | Partial updates before a forced full refresh |
 | `TZ` | system | Timezone for clock widgets |
@@ -80,7 +75,7 @@ espflash flash --monitor target/xtensa-esp32s3-espidf/release/homepaper-fw
 Run `espflash` from the `firmware/` directory so it picks up `espflash.toml` (the 4 MB partition table). Optionally copy `.env.template` to `.env` before building to compile in default setup values for development.
 
 1. On first boot, the device opens the Wi-Fi network **`homepaper-setup`**. Join it and open **http://192.168.71.1**.
-2. Enter your Wi-Fi network, the **server URL** (e.g. `ws://192.168.1.10:8080/ws/device`), the device ID and the token. The device restarts and connects.
+2. Use **Open the setup page** on the display's **Display** tab in the web UI: the form arrives with the server URL, device ID and token filled in, and you only choose your Wi-Fi. (Or type them in by hand; the same tab lists them.) The device restarts and connects.
 3. To get back to setup later, hold **BOOT** for 3 seconds while the device is running. (Not at power-on: that puts the ESP32-S3 into its flashing mode.) If Wi-Fi fails, the portal opens by itself for 5 minutes, then the device retries.
 
 The web UI shows the device as online and *in sync* once its framebuffer checksum matches the server's.

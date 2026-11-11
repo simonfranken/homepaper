@@ -6,6 +6,7 @@ import (
 	"golang.org/x/image/font"
 	"golang.org/x/image/font/gofont/gobold"
 	"golang.org/x/image/font/gofont/gomedium"
+	"golang.org/x/image/font/gofont/gomono"
 	"golang.org/x/image/font/gofont/goregular"
 	"golang.org/x/image/font/opentype"
 )
@@ -55,4 +56,20 @@ func face(id fontID, px float64) font.Face {
 	}
 	faces[key] = f
 	return f
+}
+
+// FontFile returns an embedded font as TTF, so the web UI can set its text
+// in the same typeface the panel uses without shipping a second copy.
+func FontFile(name string) ([]byte, bool) {
+	switch name {
+	case "go-regular.ttf":
+		return goregular.TTF, true
+	case "go-medium.ttf":
+		return gomedium.TTF, true
+	case "go-bold.ttf":
+		return gobold.TTF, true
+	case "go-mono.ttf":
+		return gomono.TTF, true
+	}
+	return nil, false
 }

@@ -15,6 +15,7 @@ func RunDemo(ctx context.Context, s *Store) {
 		return Entity{ID: id, State: state, Attributes: attrs, LastChanged: now}
 	}
 	s.Replace([]Entity{
+		// One of each kind the widgets can show.
 		e("sensor.living_room_temperature", "21.4", map[string]any{"friendly_name": "Living room", "unit_of_measurement": "°C", "device_class": "temperature"}),
 		e("sensor.living_room_humidity", "48", map[string]any{"friendly_name": "Living room humidity", "unit_of_measurement": "%", "device_class": "humidity"}),
 		e("sensor.outdoor_temperature", "7.8", map[string]any{"friendly_name": "Outdoor", "unit_of_measurement": "°C", "device_class": "temperature"}),

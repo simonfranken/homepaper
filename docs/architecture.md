@@ -31,7 +31,7 @@ Two components ([D-002](decisions.md#d-002)):
 
 | Module | Responsibility |
 |---|---|
-| **HA client** | Connects to Home Assistant's WebSocket API, subscribes to the entities that layouts use, keeps a local state store current ([P-006](decisions.md#p-006)). URL and token come from `server/.env` for now, and will come from a UI settings page later ([D-013](decisions.md#d-013)). |
+| **HA client** | Connects to Home Assistant's WebSocket API, subscribes to the entities that layouts use, keeps a local state store current ([P-006](decisions.md#p-006)). URL and token are entered in the web UI, with `HA_URL`/`HA_TOKEN` as a fallback ([D-013](decisions.md#d-013)). `ha.Manager` swaps the source (demo or HA) at runtime. |
 | **Storage** | Saves devices, their layouts, widget instances and their entity bindings. |
 | **Renderer** | Turns layout + widget configs + current states into a bitmap for the device's panel (resolution, color depth, packing). See [rendering.md](rendering.md). |
 | **Device hub** | Accepts device WebSocket connections, authenticates them, sends full and partial frames, decides when to send (diffing, rate limiting, full-refresh cadence). See [device-protocol.md](device-protocol.md). |
@@ -69,12 +69,12 @@ The planned default is a Docker container on the user's homelab (e.g. Proxmox), 
 server/
 ├── cmd/homepaper/        main: config from env, wiring
 ├── cmd/fakedevice/       protocol test client (acts like the firmware)
-├── internal/ha/          state store, HA WebSocket client, demo source
-├── internal/store/       devices + layouts (JSON file)
+├── internal/ha/          state store, HA WebSocket client, demo source, Manager (switches source at runtime)
+├── internal/store/       devices, layouts, saved HA settings (JSON file)
 ├── internal/render/      widgets, icons, fonts → frame.Bitmap
 ├── internal/frame/       1bpp bitmap, region diff, wire encoding (+ tests)
 ├── internal/devicehub/   device WebSocket: auth, sessions, diff/rate limit, acks
-├── internal/api/         REST API, UI event WebSocket, basic auth, SPA serving
+├── internal/api/         REST API, HA settings (settings.go), UI event WebSocket, basic auth, fonts, SPA serving
 └── web/                  embed.go + dist/ (build output) + ui/ (Vue 3 source)
 
 firmware/src/
@@ -86,4 +86,6 @@ firmware/src/
 └── display.rs    framebuffer, CRC-32, Panel trait, NullPanel
 ```
 
-**UI events:** the editor keeps a WebSocket open to `/api/events`. The server sends small notifications (`devices`, `device` with an ID, `render` with an ID), and the UI refetches what changed or reloads the preview image.
+**UI events:** the editor keeps a WebSocket open to `/api/events`. The server sends small notifications (`devices`, `device` with an ID, `render` with an ID, `settings` after the HA connection changed), and the UI refetches what changed or reloads the preview image.
+
+**Fonts:** `GET /api/fonts/{name}` serves the Go fonts embedded for the renderer, so the editor's text is set in the same typeface as the panel without shipping a second copy.

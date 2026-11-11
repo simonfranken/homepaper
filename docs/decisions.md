@@ -24,7 +24,7 @@ When an item changes status, update it here (status, date, rationale) and in the
 | [D-010](#d-010) | Frontend: Vue 3 + TypeScript, embedded in the Go binary | Decided |
 | [D-011](#d-011) | Renderer: native Go, server-rendered preview | Decided |
 | [D-012](#d-012) | Firmware: Rust + esp-idf-svc | Decided |
-| [D-013](#d-013) | HA URL and token configured in the web UI (interim: `.env`) | Decided |
+| [D-013](#d-013) | HA URL and token configured in the web UI | Decided, implemented |
 | [P-001](#p-001) | ~~Server stack: TypeScript / Node~~ | Superseded by D-009, D-010 |
 | [P-002](#p-002) | ~~Renderer: Satori + resvg~~ | Superseded by D-011 |
 | [P-003](#p-003) | Layout model: snap grid (e.g. 8×6) | Proposed |
@@ -91,7 +91,11 @@ When an item changes status, update it here (status, date, rationale) and in the
 - Rejected for now: `esp-hal` + Embassy without ESP-IDF (leaner, but more work for networking and TLS), and Arduino + GxEPD2 (superseded P-005).
 
 ### D-013
-**Home Assistant URL and token are configured in the web UI** (2026-11-10). The project owner's goal: the user enters the HA URL and long-lived token in the UI, without editing files or environment variables. **Interim:** until that UI exists, the server reads `HA_URL` and `HA_TOKEN` from `server/.env` (template: `server/.env.template`, gitignored) or from real environment variables, which take precedence. Planned for the UI version: a settings page that saves to the server's storage, tests the connection before saving, never sends the token back to the browser, and reconnects the HA client without a restart.
+**Home Assistant URL and token are configured in the web UI** (2026-11-10). The project owner's goal: the user enters the HA URL and long-lived token in the UI, without editing files or environment variables. **Implemented 2026-11-11** as the Home Assistant dialog in the header (`PUT /api/settings/ha`):
+- The server tests the connection before saving and tells "can't reach" apart from "token rejected".
+- Settings are saved in `homepaper.json` (key `home_assistant`) and the source switches without a restart.
+- The token is never sent back to the browser. An empty token field keeps the saved token, but only for the same host and port, and never from `https` down to `http`. Otherwise anyone who can open the UI could have the server send the token to an address of their choice.
+- **Precedence (implementation choice, not yet confirmed by the project owner):** settings saved in the UI win over `HA_URL`/`HA_TOKEN` from the environment or `server/.env`, which remain as a fallback for headless setups. With neither, the server shows demo entities. The server logs which source it uses at startup, and warns when it ignores `HA_URL`. Removing the connection in the UI falls back to the environment.
 
 ## Proposed
 
@@ -132,13 +136,13 @@ These are recommended defaults. The project owner hasn't confirmed them yet.
 - **BOOT is held for 3 s while running**: a flag is saved in NVS and the device restarts into setup. BOOT can't be held at power-on, because GPIO0 is a strapping pin and that enters the ROM download mode;
 - it can't join Wi-Fi after 5 attempts: the portal **restarts after 5 min** to retry, e.g. when the router is still booting after a power cut.
 
-The Wi-Fi password and token are never shown in the form; an empty field keeps the saved value. The device restarts on any fatal error, or after 5 min without a server connection. Wi-Fi credentials, server URL, device ID and token are stored in NVS. Values from `.env` are compiled in as defaults for development. There's no captive-portal DNS yet, so the address has to be typed in.
+The Wi-Fi password and token are never shown in the form; an empty field keeps the saved value. **Prefill link (2026-11-11):** the web UI links to `http://192.168.71.1/?server_url=…&device_id=…&token=…`; the portal fills the form from the query, carries the token in a hidden field and asks only for Wi-Fi. The token then sits in that browser's history, which is no worse than the form POST over the open access point, but worth knowing. `CONFIG_HTTPD_MAX_REQ_HDR_LEN` (2048) and `CONFIG_HTTPD_MAX_URI_LEN` (1024) are raised for it. *Not yet tested on hardware.* The device restarts on any fatal error, or after 5 min without a server connection. Wi-Fi credentials, server URL, device ID and token are stored in NVS. Values from `.env` are compiled in as defaults for development. There's no captive-portal DNS yet, so the address has to be typed in.
 
 ### P-011
 **Server storage: a single JSON file** (`$HOMEPAPER_DATA/homepaper.json`, written atomically). It's enough for a handful of devices and layouts. Revisit if history or many users are needed.
 
 ### P-012
-**Web UI authentication: none by default**, meant for a trusted LAN. Setting `HOMEPAPER_PASSWORD` turns on HTTP basic auth for the UI and API. The device WebSocket always authenticates with device tokens. An HA add-on with ingress would replace this ([O-004](#o-004)).
+**Web UI authentication: none by default**, meant for a trusted LAN. Setting `HOMEPAPER_PASSWORD` turns on HTTP basic auth for the UI and API. The device WebSocket always authenticates with device tokens. An HA add-on with ingress would replace this ([O-004](#o-004)). Without a password, anyone on the LAN can also change the Home Assistant connection (`PUT /api/settings/ha`); the server tests a new address before saving, but the request itself is unauthenticated.
 
 ### P-013
 **Fonts: the Go font family** (embedded), rasterized with hinting and hard-thresholded to 1 bit. That's good enough at the sizes used. Bitmap fonts (BDF) for small text remain the plan from [D-011](#d-011).

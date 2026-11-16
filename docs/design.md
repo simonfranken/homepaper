@@ -42,6 +42,7 @@ The structure stays as built (header with display tabs, Layout/Display switch, e
   - Multi-entity fields are an ordered list with drag handles.
   - Short select lists are radio cards, long ones a dropdown. Numbers get a −/+ stepper.
   - Required fields are marked "Required".
+- **Live preview:** the preview is a virtual display that receives the panel's own frames pushed, without the panel's rate limit. Refreshed regions flash a blue outline, and a status line under the bezel names the last frame.
 - **Dividers:** a Rules/Frames switch in the editor toolbar sets the layout's dividers ([D-015](decisions.md#d-015)). The design canvas had no place for it; the toolbar is the implementation's choice.
 - **Light only:** the old editor followed the system's dark mode. The design is ink on paper and has no dark variant, so the restyled UI is light only.
 - **Display tab:** numbered setup steps, the values to enter by hand (with Copy and Show), a status card with details, and Manage (rename, replace token, delete) with inline confirmation.

@@ -71,11 +71,12 @@ type Hub struct {
 
 	mu       sync.Mutex
 	sessions map[string]*session
+	viewers  map[*session]bool
 	status   map[string]*Status
 }
 
 func New(st *store.Store, states *ha.Store, log *slog.Logger, settings Settings) *Hub {
-	h := &Hub{Store: st, States: states, Log: log, Settings: settings, sessions: map[string]*session{}, status: map[string]*Status{}}
+	h := &Hub{Store: st, States: states, Log: log, Settings: settings, sessions: map[string]*session{}, viewers: map[*session]bool{}, status: map[string]*Status{}}
 	states.OnChange(h.onStates)
 	return h
 }
@@ -104,34 +105,42 @@ func (h *Hub) updateStatus(id string, fn func(s *Status)) {
 	}
 }
 
-// Wake asks the session of a device (if connected) to re-render.
+// Wake asks the session of a device (if connected) and its viewers to
+// re-render.
 func (h *Hub) Wake(id string) {
-	h.mu.Lock()
-	s := h.sessions[id]
-	h.mu.Unlock()
-	if s != nil {
+	for _, s := range h.sessionsOf(id) {
 		s.wake()
 	}
 }
 
+// sessionsOf returns the device's session (if connected) and its viewers;
+// all of them when id is empty.
+func (h *Hub) sessionsOf(id string) []*session {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	var out []*session
+	for devID, s := range h.sessions {
+		if id == "" || devID == id {
+			out = append(out, s)
+		}
+	}
+	for s := range h.viewers {
+		if id == "" || s.deviceID == id {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
 // Disconnect closes a device's session, e.g. after it was deleted.
 func (h *Hub) Disconnect(id string) {
-	h.mu.Lock()
-	s := h.sessions[id]
-	h.mu.Unlock()
-	if s != nil {
+	for _, s := range h.sessionsOf(id) {
 		s.conn.Close(websocket.StatusPolicyViolation, "device removed")
 	}
 }
 
 func (h *Hub) onStates(ids []string) {
-	h.mu.Lock()
-	sessions := make([]*session, 0, len(h.sessions))
-	for _, s := range h.sessions {
-		sessions = append(sessions, s)
-	}
-	h.mu.Unlock()
-	for _, s := range sessions {
+	for _, s := range h.sessionsOf("") {
 		if s.uses(ids) {
 			s.wake()
 		}
@@ -252,4 +261,42 @@ func writeJSON(ctx context.Context, conn *websocket.Conn, v any) error {
 	wctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	return conn.Write(wctx, websocket.MessageText, data)
+}
+
+// ServeViewer handles GET /api/devices/{id}/live: an editor tab becomes a
+// virtual copy of the display. It speaks the device protocol from the
+// welcome on (binary frames in, acks out) and gets frames the way the
+// display does: pushed on every change, diffed into partial and full frames,
+// each waiting for its ack. Unlike the display it is not rate limited (no
+// debounce, no minimum interval). It does not replace the display's session
+// or change its status. The UI's auth protects it.
+func (h *Hub) ServeViewer(w http.ResponseWriter, r *http.Request, id string) {
+	dev, err := h.Store.Get(id)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	conn, err := websocket.Accept(w, r, nil)
+	if err != nil {
+		return
+	}
+	defer conn.CloseNow()
+	ctx := r.Context()
+
+	s := &session{hub: h, conn: conn, deviceID: dev.ID, viewer: true, wakeCh: make(chan struct{}, 1), acks: make(chan inbound, 4)}
+	s.refs.Store(ReferencedEntities(dev.Layout))
+	h.mu.Lock()
+	h.viewers[s] = true
+	h.mu.Unlock()
+	defer func() {
+		h.mu.Lock()
+		delete(h.viewers, s)
+		h.mu.Unlock()
+	}()
+
+	if err := writeJSON(ctx, conn, map[string]any{"type": "welcome", "full_refresh_every": h.Settings.FullRefreshEvery,
+		"panel": dev.Panel}); err != nil {
+		return
+	}
+	s.run(ctx)
 }

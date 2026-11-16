@@ -3,6 +3,7 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { GridLayout, GridItem } from 'grid-layout-plus'
 import { api, type Device, type Dividers, type Entity, type Layout, type Widget, type WidgetKind } from '../api'
 import Icon from './Icon.vue'
+import { connectLive, type LiveFrame } from '../live'
 import WidgetForm from './WidgetForm.vue'
 
 const props = defineProps<{ device: Device; kinds: WidgetKind[]; entities: Entity[]; previewVersion: number }>()
@@ -73,11 +74,45 @@ onMounted(() => {
 })
 onUnmounted(() => ro?.disconnect())
 
+// ---- Live preview ----------------------------------------------------------
+// The preview is a virtual display: it gets the same pushed frames as the
+// panel (full, then partial diffs), without the panel's rate limit. The PNG
+// below is only the fallback while the live connection is down.
+const liveCanvas = ref<HTMLCanvasElement>()
+const liveReady = ref(false)
+const lastFrame = ref<LiveFrame>()
+const flashes = ref<(LiveFrame & { id: number })[]>([])
+let flashId = 0
+let stopLive: (() => void) | undefined
+onMounted(() => {
+  stopLive = connectLive({
+    deviceId: props.device.id,
+    canvas: () => liveCanvas.value,
+    onFrame: (f) => {
+      liveReady.value = true
+      lastFrame.value = f
+      // Outline the region that changed, the way the panel refreshes it.
+      const id = ++flashId
+      flashes.value = [...flashes.value, { ...f, id }]
+      setTimeout(() => (flashes.value = flashes.value.filter((x) => x.id !== id)), 1200)
+    },
+    onState: (connected) => {
+      if (!connected) liveReady.value = false
+    },
+  })
+})
+onUnmounted(() => stopLive?.())
+
+function pct(n: number, of: number) {
+  return `${(n / of) * 100}%`
+}
+
 // ---- Preview -------------------------------------------------------------
 // Load the new image off-screen and swap, so it never flashes blank.
 const previewSrc = ref(api.previewUrl(props.device.id, props.previewVersion))
 let previewTick = 0
 function reloadPreview() {
+  if (liveReady.value) return
   const url = api.previewUrl(props.device.id, `${props.previewVersion}.${++previewTick}`)
   const img = new Image()
   img.onload = () => (previewSrc.value = url)
@@ -424,12 +459,33 @@ const modKey = isMac ? '⌘' : 'Ctrl'
             @pointerdown="onFramePointerDown"
           >
             <img
+              v-show="!liveReady"
               class="preview"
               :class="{ exact: exactPixels }"
               :src="previewSrc"
               alt="The frame as the display shows it"
               draggable="false"
             />
+            <canvas
+              v-show="liveReady"
+              ref="liveCanvas"
+              class="preview"
+              :class="{ exact: exactPixels }"
+              role="img"
+              aria-label="The frame as the display shows it, updated live"
+            ></canvas>
+            <div
+              v-for="f in flashes"
+              :key="f.id"
+              class="flash"
+              aria-hidden="true"
+              :style="{
+                left: pct(f.x, device.panel.width),
+                top: pct(f.y, device.panel.height),
+                width: pct(f.w, device.panel.width),
+                height: pct(f.h, device.panel.height),
+              }"
+            ></div>
             <div class="guides" aria-hidden="true"></div>
             <GridLayout
               v-model:layout="gridItems"
@@ -475,6 +531,15 @@ const modKey = isMac ? '⌘' : 'Ctrl'
           </div>
         </div>
       </div>
+
+      <p class="live small" role="status">
+        <template v-if="liveReady && lastFrame">
+          <span class="live-dot" aria-hidden="true"></span>
+          Live · frame {{ lastFrame.seq }} {{ lastFrame.kind }} {{ lastFrame.w }} × {{ lastFrame.h }} px ·
+          {{ (lastFrame.bytes / 1024).toFixed(1) }} KB · {{ lastFrame.at.toLocaleTimeString() }}
+        </template>
+        <template v-else><span class="spin"></span> Connecting the live preview…</template>
+      </p>
 
       <p v-if="notice" class="toast" role="status">
         <span>{{ notice }}</span>
@@ -769,6 +834,38 @@ const modKey = isMac ? '⌘' : 'Ctrl'
 .blank-title {
   font-size: var(--t17);
   font-weight: 700;
+}
+
+/* The region a frame refreshed, outlined for a moment. Editor blue: it
+   never reaches the panel. */
+.flash {
+  position: absolute;
+  pointer-events: none;
+  border: 2px solid var(--blue);
+  background: rgb(29 78 216 / 0.1);
+  animation: flash 1.2s ease-out forwards;
+}
+
+@keyframes flash {
+  to {
+    opacity: 0;
+  }
+}
+
+.live {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  color: var(--muted);
+  font-family: 'Go Mono', ui-monospace, monospace;
+}
+
+.live-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--ink);
 }
 
 .toast {

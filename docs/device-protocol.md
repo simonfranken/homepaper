@@ -108,6 +108,16 @@ Settings are in `devicehub.Settings`. Some can be changed with environment varia
   - more than 1 hour has passed since the last full frame;
   - a partial frame's checksum didn't match (see Ack).
 
+## Editor live preview
+
+`GET /api/devices/{id}/live` (behind the UI's auth, not the device token) lets an editor tab act as a virtual copy of the display. After the server's `welcome` (which also carries `panel`), it is the same protocol: binary frames in, acks with the framebuffer CRC-32 out. The same session code produces the frames, so the preview gets full and partial frames exactly as the panel would.
+
+Differences from a display:
+- **No rate limit:** no debounce and no minimum interval. Each change is rendered at once, held back only by the preview's own acks.
+- It doesn't replace the display's connection and doesn't change its status in the UI.
+
+The client is `server/web/ui/src/live.ts`.
+
 ## Possible later additions
 
 - An HTTP polling mode for battery devices: `GET /api/device/{id}/frame` with `ETag` / `If-None-Match`, then deep sleep ([O-005](decisions.md#o-005)).

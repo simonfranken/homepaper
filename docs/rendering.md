@@ -74,7 +74,8 @@ The renderer draws the design in [design.md](design.md#panel-d-015) (implemented
 
 ## Debugging
 
-- `GET /api/devices/{id}/preview.png` returns the current frame as a PNG. The editor shows this.
+- The editor preview is a **live virtual display** (`/api/devices/{id}/live`, see [device-protocol.md](device-protocol.md#editor-live-preview)). It gets the same pushed full and partial frames as the panel, but without the rate limit. Each refreshed region is outlined in blue for a moment, and a line under the preview names the last frame (number, kind, size, bytes, time).
+- `GET /api/devices/{id}/preview.png` returns the current frame as a PNG. The editor falls back to it while the live connection is down.
 - `server/cmd/fakedevice -png out.png` connects like a device and writes its reconstructed framebuffer after every frame.
 - The firmware prints full frames as ASCII art (100 × 30 characters) to the serial monitor while no panel is connected.
 - Later: an editor overlay highlighting regions that changed since the last frame.

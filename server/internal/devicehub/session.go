@@ -37,6 +37,17 @@ type session struct {
 	// i.e. the mismatch is systematic; partial mismatches then stop
 	// triggering resyncs until a checksum matches again.
 	fullMismatch bool
+	// viewer marks an editor tab watching the device's frames (Hub.ServeViewer).
+	// It gets the same frames on the same schedule, but leaves the device's
+	// status alone.
+	viewer bool
+}
+
+// status updates the device's status, unless this is a viewer.
+func (s *session) status(fn func(st *Status)) {
+	if !s.viewer {
+		s.hub.updateStatus(s.deviceID, fn)
+	}
 }
 
 func (s *session) wake() {
@@ -80,13 +91,19 @@ func (s *session) run(ctx context.Context) {
 		case <-minute.C:
 			minute.Reset(untilNextMinute())
 		}
-		// Debounce: collect changes that arrive close together.
+		// Debounce: collect changes that arrive close together. Viewers (the
+		// editor) are not rate limited: they render at once, held back only
+		// by their own acks.
+		debounce, minInterval := s.hub.Settings.Debounce, s.hub.Settings.MinInterval
+		if s.viewer {
+			debounce, minInterval = 0, 0
+		}
 		select {
 		case <-ctx.Done():
 			return
-		case <-time.After(s.hub.Settings.Debounce):
+		case <-time.After(debounce):
 		}
-		if wait := s.hub.Settings.MinInterval - time.Since(s.lastSend); wait > 0 {
+		if wait := minInterval - time.Since(s.lastSend); wait > 0 {
 			select {
 			case <-ctx.Done():
 				return
@@ -100,7 +117,7 @@ func (s *session) run(ctx context.Context) {
 		}
 		if err := s.update(ctx); err != nil {
 			s.hub.Log.Warn("device update failed", "device", s.deviceID, "err", err)
-			s.hub.updateStatus(s.deviceID, func(st *Status) { st.LastError = err.Error() })
+			s.status(func(st *Status) { st.LastError = err.Error() })
 			s.conn.Close(websocket.StatusInternalError, "update failed")
 			return
 		}
@@ -172,7 +189,7 @@ func (s *session) send(ctx context.Context, kind uint8, r frame.Region, next *fr
 	} else {
 		s.partials++
 	}
-	s.hub.updateStatus(s.deviceID, func(st *Status) {
+	s.status(func(st *Status) {
 		st.FramesSent++
 		st.BytesSent += len(buf)
 		st.LastKind = kindName
@@ -193,7 +210,7 @@ func (s *session) send(ctx context.Context, kind uint8, r frame.Region, next *fr
 			}
 			want := fmt.Sprintf("%08x", expected.CRC32())
 			inSync := a.CRC == want
-			s.hub.updateStatus(s.deviceID, func(st *Status) {
+			s.status(func(st *Status) {
 				st.LastAckSeq = a.Seq
 				st.LastAckAt = time.Now()
 				st.InSync = inSync
@@ -246,7 +263,7 @@ func (s *session) readLoop(ctx context.Context, cancel context.CancelFunc) {
 			default:
 			}
 		case "status":
-			s.hub.updateStatus(s.deviceID, func(st *Status) {
+			s.status(func(st *Status) {
 				st.RSSI, st.FreeHeap, st.Uptime = m.RSSI, m.FreeHeap, m.Uptime
 			})
 		case "log":

@@ -61,6 +61,9 @@ func (a *API) Handler() http.Handler {
 	api.HandleFunc("DELETE /api/devices/{id}", a.deleteDevice)
 	api.HandleFunc("PUT /api/devices/{id}/layout", a.putLayout)
 	api.HandleFunc("GET /api/devices/{id}/preview.png", a.preview)
+	api.HandleFunc("GET /api/devices/{id}/live", func(w http.ResponseWriter, r *http.Request) {
+		a.Hub.ServeViewer(w, r, r.PathValue("id"))
+	})
 	api.HandleFunc("GET /api/settings/ha", a.getHA)
 	api.HandleFunc("PUT /api/settings/ha", a.putHA)
 	api.HandleFunc("GET /api/fonts/{name}", a.font)

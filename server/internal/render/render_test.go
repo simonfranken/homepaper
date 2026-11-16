@@ -230,3 +230,47 @@ func TestEveryKindEverySize(t *testing.T) {
 		}
 	}
 }
+
+// Aligned widgets stay in their cells; right alignment ends near the right
+// edge. The sheets go to $HOMEPAPER_RENDER_OUT when set, for a look.
+func TestAlignment(t *testing.T) {
+	st := demoStates(t)
+	setState(st, "binary_sensor.bathroom_window", "off")
+	for _, align := range []string{"left", "center", "right"} {
+		o := func(m map[string]any) map[string]any { m["align"] = align; return m }
+		l := store.Layout{Cols: 8, Rows: 6, Widgets: []store.Widget{
+			{ID: "c1", Kind: "clock", X: 0, Y: 0, W: 4, H: 1, Options: o(map[string]any{"format": "datetime"})},
+			{ID: "c2", Kind: "clock", X: 4, Y: 0, W: 4, H: 1, Options: o(map[string]any{"format": "date"})},
+			{ID: "c3", Kind: "clock", X: 0, Y: 1, W: 2, H: 1, Options: o(map[string]any{"format": "time"})},
+			{ID: "v1", Kind: "value", X: 2, Y: 1, W: 2, H: 1, Options: o(map[string]any{"entity": "sensor.power_consumption"})},
+			{ID: "v2", Kind: "value", X: 4, Y: 1, W: 1, H: 1, Options: o(map[string]any{"entity": "sensor.power_consumption"})},
+			{ID: "s1", Kind: "binary", X: 5, Y: 1, W: 3, H: 1, Options: o(map[string]any{"entity": "binary_sensor.front_door"})},
+			{ID: "t1", Kind: "temperature", X: 0, Y: 2, W: 3, H: 2, Options: o(map[string]any{"entity": "sensor.living_room_temperature", "humidity_entity": "sensor.living_room_humidity"})},
+			{ID: "t2", Kind: "temperature", X: 3, Y: 2, W: 1, H: 1, Options: o(map[string]any{"entity": "sensor.outdoor_temperature"})},
+			{ID: "s2", Kind: "binary", X: 3, Y: 3, W: 1, H: 1, Options: o(map[string]any{"entity": "person.alex"})},
+			{ID: "x1", Kind: "text", X: 4, Y: 2, W: 4, H: 1, Options: o(map[string]any{"text": "Downstairs", "size": "medium"})},
+			{ID: "x2", Kind: "text", X: 4, Y: 3, W: 4, H: 1, Options: o(map[string]any{"text": "Bins go out tonight.", "size": "small"})},
+			{ID: "x3", Kind: "text", X: 0, Y: 4, W: 8, H: 1, Options: o(map[string]any{"text": "Good evening", "size": "large"})},
+			{ID: "m1", Kind: "value", X: 0, Y: 5, W: 4, H: 1, Options: o(map[string]any{"entity": "sensor.missing"})},
+		}}
+		g := Render(l, store.DefaultPanel, st, goldenNow).ToGray()
+		if dir := os.Getenv("HOMEPAPER_RENDER_OUT"); dir != "" {
+			writePNG(t, filepath.Join(dir, "align-"+align+".png"), g)
+		}
+		// The 8-wide large text: right-aligned ink reaches the right content edge.
+		rightmost := 0
+		for y := 330; y < 390; y++ {
+			for x := 0; x < 800; x++ {
+				if g.GrayAt(x, y).Y == 0 && x > rightmost {
+					rightmost = x
+				}
+			}
+		}
+		if align == "right" && rightmost < 780 {
+			t.Errorf("right-aligned text ends at x=%d", rightmost)
+		}
+		if align == "left" && rightmost > 600 {
+			t.Errorf("left-aligned text reaches x=%d", rightmost)
+		}
+	}
+}

@@ -54,7 +54,7 @@ func Render(layout store.Layout, panel store.Panel, states *ha.Store, now time.T
 		x1, y1 := int(math.Round(float64(wg.X+wg.W)*cw)), int(math.Round(float64(wg.Y+wg.H)*ch))
 		r := R{x0, y0, x1 - x0, y1 - y0}
 		c := &ctx{dc: dc, states: states, now: now, opts: wg.Options,
-			clip: image.Rect(x0, y0, x1, y1).Inset(frameGap/2 + 2), ink: color.Gray{0}}
+			clip: image.Rect(x0, y0, x1, y1).Inset(frameGap/2 + 2), ink: color.Gray{0}, ax: alignment(wg.Options)}
 		alert := k.alert != nil && k.alert(c)
 		if frames {
 			drawFrame(dc, r)

@@ -34,9 +34,17 @@ func (c *ctx) missing(r R, label string) {
 		px = 20
 	}
 	base := r.Y + (r.H+capH(f))/2
-	w := c.T(unavailable, fontBold, px, r.X, base, 0)
-	if r.W-w-12 >= width(face(fontRegular, 14), "Not available") {
-		c.T("Not available", fontRegular, 14, r.X+w+12, base, 0)
+	w := width(f, unavailable)
+	note := width(face(fontRegular, 14), "Not available")
+	withNote := r.W-w-12 >= note
+	total := w
+	if withNote {
+		total += 12 + note
+	}
+	x := c.alignX(r, total)
+	c.T(unavailable, fontBold, px, x, base, 0)
+	if withNote {
+		c.T("Not available", fontRegular, 14, x+w+12, base, 0)
 	}
 }
 
@@ -65,7 +73,7 @@ func renderTemperature(c *ctx, r R) {
 	whole, frac := tempParts(e.State, e.Attr("unit_of_measurement"))
 	if small(r) {
 		r = c.smallLabel(r, label)
-		c.bigNumber(r, whole, frac, 34, 0)
+		c.bigNumber(r, whole, frac, 34, c.ax)
 		return
 	}
 	r = c.label(r, label)
@@ -74,10 +82,12 @@ func renderTemperature(c *ctx, r R) {
 		main = R{r.X, r.Y, r.W, r.H - 26}
 		f := face(fontRegular, 17)
 		y := r.bottom() - 2
-		c.droplet(float64(r.X+6), float64(y-capH(f)/2-1), 14)
-		c.T(formatNumber(hum.State, 0)+" %", fontRegular, 17, r.X+18, y, 0)
+		txt := formatNumber(hum.State, 0) + " %"
+		x := c.alignX(r, 18+width(f, txt))
+		c.droplet(float64(x+6), float64(y-capH(f)/2-1), 14)
+		c.T(txt, fontRegular, 17, x+18, y, 0)
 	}
-	c.bigNumber(main, whole, frac, 80, 0)
+	c.bigNumber(main, whole, frac, 80, c.ax)
 }
 
 // ---------- value ----------
@@ -97,12 +107,16 @@ func renderValue(c *ctx, r R) {
 	} else {
 		r = c.label(r, label)
 	}
-	x := r.X
-	if icon := valueIcon(e.Attr("device_class")); icon != nil && !sm {
-		s := math.Min(float64(r.H), 30)
-		icon(c, float64(r.X)+s/2, float64(r.Y)+float64(r.H)/2, s)
-		x += int(s) + 8
+	icon := valueIcon(e.Attr("device_class"))
+	if sm {
+		icon = nil
 	}
+	iconW := 0
+	s := math.Min(float64(r.H), 30)
+	if icon != nil {
+		iconW = int(s) + 8
+	}
+	x := r.X + iconW
 	up := 25
 	if sm {
 		up = 17
@@ -115,7 +129,13 @@ func renderValue(c *ctx, r R) {
 	fb := face(fontBold, px)
 	base := r.Y + (r.H+capH(fb))/2
 	room := r.right() - x - uw
-	x += c.T(ellip(val, fontBold, px, room), fontBold, px, x, base, 0)
+	val = ellip(val, fontBold, px, room)
+	x = c.alignX(r, iconW+width(fb, val)+uw)
+	if icon != nil {
+		icon(c, float64(x)+s/2, float64(r.Y)+float64(r.H)/2, s)
+		x += iconW
+	}
+	x += c.T(val, fontBold, px, x, base, 0)
 	if unit != "" {
 		c.T(" "+unit, fontRegular, up, x, base, 0)
 	}
@@ -560,11 +580,13 @@ func renderBinary(c *ctx, r R) {
 		fb := face(fontBold, px)
 		base := rest.Y + (rest.H+capH(fb))/2
 		if width(fb, word) <= rest.W-26 {
-			icon(c, float64(rest.X+10), float64(base-capH(fb)/2), 20)
-			c.T(word, fontBold, px, rest.X+26, base, 0)
+			x := c.alignX(rest, 26+width(fb, word))
+			icon(c, float64(x+10), float64(base-capH(fb)/2), 20)
+			c.T(word, fontBold, px, x+26, base, 0)
 		} else {
 			px = fit(word, fontBold, []int{20, 17, 14}, rest.W, rest.H)
-			c.T(ellip(word, fontBold, px, rest.W), fontBold, px, rest.X, base, 0)
+			word = ellip(word, fontBold, px, rest.W)
+			c.T(word, fontBold, px, c.alignX(rest, width(face(fontBold, px), word)), base, 0)
 		}
 		return
 	}
@@ -572,8 +594,10 @@ func renderBinary(c *ctx, r R) {
 	px := fit(word, fontBold, []int{25, 20, 17}, r.W-36, r.H)
 	fb := face(fontBold, px)
 	base := r.Y + (r.H+capH(fb))/2
-	icon(c, float64(r.X+13), float64(base-capH(fb)/2), 28)
-	c.T(ellip(word, fontBold, px, r.W-36), fontBold, px, r.X+36, base, 0)
+	word = ellip(word, fontBold, px, r.W-36)
+	x := c.alignX(r, 36+width(fb, word))
+	icon(c, float64(x+13), float64(base-capH(fb)/2), 28)
+	c.T(word, fontBold, px, x+36, base, 0)
 }
 
 // ---------- clock ----------
@@ -581,35 +605,56 @@ func renderBinary(c *ctx, r R) {
 func renderClock(c *ctx, r R) {
 	format := c.str("format", "date")
 	timeS := c.now.Format("15:04")
-	x := r.X
+	fb := face(fontBold, 20)
+	fr := face(fontRegular, 17)
+
+	// The pieces first, then the whole group is placed by the alignment.
+	tpx, tw := 0, 0
 	if format == "time" || format == "datetime" {
-		px := fit(timeS, fontBold, []int{56, 48, 40, 34, 25}, r.W, r.H)
+		tpx = fit(timeS, fontBold, []int{56, 48, 40, 34, 25}, r.W, r.H)
 		if format == "time" {
-			px = fit(timeS, fontBold, bigSizes, r.W, r.H)
+			tpx = fit(timeS, fontBold, bigSizes, r.W, r.H)
 		}
-		tf := face(fontBold, px)
-		base := r.Y + (r.H+capH(tf))/2
-		x += c.T(timeS, fontBold, px, x, base, 0) + 18
-		if format == "time" {
-			return
-		}
-		// The date only when it fits beside the time.
-		if r.right()-x < width(face(fontRegular, 17), "16 November") {
-			return
-		}
-		c.vline(x-9, r.Y+6, r.bottom()-6, 2)
+		tw = width(face(fontBold, tpx), timeS)
+	}
+	withDate := format != "time"
+	if format == "datetime" && r.W-tw-18 < width(fr, "16 November") {
+		withDate = false // the date only when it fits beside the time
 	}
 	day, date := c.now.Format("Monday"), c.now.Format("2 January")
 	if format == "date" && r.W >= 340 {
 		date = c.now.Format("2 January 2006")
 	}
-	fb := face(fontBold, 20)
-	fr := face(fontRegular, 17)
-	total := capH(fb) + 10 + capH(fr)
-	y := r.Y + (r.H-total)/2 + capH(fb)
-	w := r.right() - x - 4
-	c.T(ellip(day, fontBold, 20, w), fontBold, 20, x+4, y, 0)
-	c.T(ellip(date, fontRegular, 17, w), fontRegular, 17, x+4, y+10+capH(fr), 0)
+	dateX := 4 // where the date block starts in the group
+	if tw > 0 {
+		dateX = tw + 22
+	}
+	dw := 0
+	if withDate {
+		avail := r.W - dateX
+		day, date = ellip(day, fontBold, 20, avail), ellip(date, fontRegular, 17, avail)
+		dw = max(width(fb, day), width(fr, date))
+	}
+	total := tw
+	if withDate {
+		total = dateX + dw
+	}
+	x := c.alignX(r, total)
+
+	if tw > 0 {
+		tf := face(fontBold, tpx)
+		c.T(timeS, fontBold, tpx, x, r.Y+(r.H+capH(tf))/2, 0)
+		if withDate {
+			c.vline(x+tw+9, r.Y+6, r.bottom()-6, 2)
+		}
+	}
+	if withDate {
+		blockH := capH(fb) + 10 + capH(fr)
+		y := r.Y + (r.H-blockH)/2 + capH(fb)
+		bx := R{x + dateX, r.Y, dw, r.H}
+		c.T(day, fontBold, 20, c.alignX(bx, width(fb, day)), y, 0)
+		c.T(date, fontRegular, 17, c.alignX(bx, width(fr, date)), y+10+capH(fr), 0)
+	}
 }
 
 // ---------- text ----------
@@ -622,17 +667,28 @@ func renderText(c *ctx, r R) {
 	switch c.str("size", "medium") {
 	case "small":
 		f := face(fontRegular, 17)
-		c.T(ellip(s, fontRegular, 17, r.W), fontRegular, 17, r.X, r.Y+(r.H+capH(f))/2, 0)
+		s = ellip(s, fontRegular, 17, r.W)
+		c.T(s, fontRegular, 17, c.alignX(r, width(f, s)), r.Y+(r.H+capH(f))/2, 0)
 	case "large":
 		px := fit(s, fontBold, bigSizes[4:], r.W, r.H) // 64 px and below
 		f := face(fontBold, px)
-		c.T(ellip(s, fontBold, px, r.W), fontBold, px, r.X, r.Y+(r.H+capH(f))/2, 0)
+		s = ellip(s, fontBold, px, r.W)
+		c.T(s, fontBold, px, c.alignX(r, width(f, s)), r.Y+(r.H+capH(f))/2, 0)
 	default:
+		// A heading and its rule: the rule fills the space the text leaves,
+		// on both sides when centred.
 		f := face(fontBold, 25)
 		base := r.Y + (r.H+capH(f))/2
-		w := c.T(ellip(s, fontBold, 25, r.W), fontBold, 25, r.X, base, 0)
-		if r.right()-(r.X+w+12) >= 24 {
-			c.hline(r.X+w+12, r.right(), base-capH(f)/2, 2)
+		mid := base - capH(f)/2
+		s = ellip(s, fontBold, 25, r.W)
+		w := width(f, s)
+		x := c.alignX(r, w)
+		c.T(s, fontBold, 25, x, base, 0)
+		if x+w+12+24 <= r.right() {
+			c.hline(x+w+12, r.right(), mid, 2)
+		}
+		if x-12-24 >= r.X {
+			c.hline(r.X, x-12, mid, 2)
 		}
 	}
 }

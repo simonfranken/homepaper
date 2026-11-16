@@ -59,6 +59,7 @@ The structure stays as built (header with display tabs, Layout/Display switch, e
 - **Inverted means act.** A widget turns black with white content only for states that need action: door, window or garage door open; lock unlocked. Lights, motion and presence never invert. They change often, and large changing black areas ghost under partial refresh.
 - **Icons draw the state:** door ajar, window tilted, shackle open, person hollow when away, flame only while heating, bulb filled when on.
 - **Calm by default.** Idle is regular weight without an icon. Unavailable is "–" plus "Not available". All lights off says "All off".
+- **Alignment.** Single-block widgets (date/time, text, value, temperature, state) can be left-aligned (the default), centred or right-aligned. Label and content move together.
 - **Shrink by dropping, not squeezing.** Secondary information goes first, then type steps down. A primary value never goes below 20 px.
 - **Small diffs.** The clock is the only per-minute change, about a 160 × 50 px region.
 

@@ -37,6 +37,23 @@ type ctx struct {
 	opts   map[string]any
 	clip   image.Rectangle // the widget's area; text and fills are clipped to it
 	ink    color.Gray      // black, or white on an inverted widget
+	ax     float64         // horizontal alignment: 0 left, 0.5 centre, 1 right
+}
+
+// alignX is where content w wide starts in r under the widget's alignment.
+func (c *ctx) alignX(r R, w int) int {
+	return r.X + int(math.Round(c.ax*float64(r.W-w)))
+}
+
+// alignment reads the "align" option.
+func alignment(opts map[string]any) float64 {
+	switch opts["align"] {
+	case "center":
+		return 0.5
+	case "right":
+		return 1
+	}
+	return 0
 }
 
 func (c *ctx) str(key, def string) string {
@@ -160,7 +177,8 @@ func (c *ctx) label(r R, s string) R {
 		px = 14
 	}
 	f := face(fontMedium, px)
-	c.T(ellip(s, fontMedium, px, r.W), fontMedium, px, r.X, r.Y+capH(f), 0)
+	s = ellip(s, fontMedium, px, r.W)
+	c.T(s, fontMedium, px, c.alignX(r, width(f, s)), r.Y+capH(f), 0)
 	used := capH(f) + 9
 	return R{r.X, r.Y + used, r.W, r.H - used}
 }
@@ -168,7 +186,8 @@ func (c *ctx) label(r R, s string) R {
 // smallLabel is the 14 px caption of one-cell widgets.
 func (c *ctx) smallLabel(r R, s string) R {
 	f := face(fontMedium, 14)
-	c.T(ellip(s, fontMedium, 14, r.W), fontMedium, 14, r.X, r.Y+capH(f), 0)
+	s = ellip(s, fontMedium, 14, r.W)
+	c.T(s, fontMedium, 14, c.alignX(r, width(f, s)), r.Y+capH(f), 0)
 	used := capH(f) + 6
 	return R{r.X, r.Y + used, r.W, r.H - used}
 }

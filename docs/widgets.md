@@ -21,6 +21,7 @@ A snap grid such as **8 × 6 cells** on 800 × 480 (100 × 80 px per cell) is pr
 - **Light** is a list widget (`lights`) and works for one or more entities.
 - Widgets have no frame option any more. The layout's **dividers** setting (`rules`, the default, or `frames`) separates them ([D-015](decisions.md#d-015)).
 - **Weather** shows today's high and low and a strip of the next days from `weather.get_forecasts` when the widget is two rows tall.
+- **Alignment** (left, the default; centre; right) on Date / time, Text, Value, Temperature and State moves the label and content as one group. A heading's rule fills the space the text leaves, on both sides when centred. Weather, Lights and Thermostat have column layouts and no alignment.
 - **Text** sizes: small is a one-line note, medium a heading followed by a rule, large a big bold line.
 - Doors, windows and garages that are open, and unlocked locks, are drawn **inverted**. Nothing else is.
 - Fields can carry a `placeholder` (what an empty input means) and a one-line `help`; select `choices` are `{value, label}` pairs, so the editor shows "Date and time (Mon 2 Jan, 15:04)" instead of `datetime`. An empty **Decimals** shows the value as HA reports it.

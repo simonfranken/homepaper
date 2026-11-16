@@ -49,6 +49,10 @@ type Kind struct {
 
 var labelField = Field{Key: "label", Label: "Label", Type: FieldText, Placeholder: "Entity name"}
 
+// alignField places a widget's content left, centred or right in its cell.
+var alignField = Field{Key: "align", Label: "Alignment", Type: FieldSelect, Default: "left", Choices: []Choice{
+	{"left", "Left"}, {"center", "Centre"}, {"right", "Right"}}}
+
 var kinds = map[string]*Kind{}
 
 // Kinds lists all widget kinds in a stable order.
@@ -75,6 +79,7 @@ func init() {
 			{Key: "unit", Label: "Unit", Type: FieldText, Placeholder: "From the entity"},
 			{Key: "decimals", Label: "Decimals", Type: FieldNumber, Placeholder: "As reported",
 				Help: "Leave empty to show the value as Home Assistant reports it."},
+			alignField,
 		},
 		render: renderValue,
 	})
@@ -86,6 +91,7 @@ func init() {
 			{Key: "humidity_entity", Label: "Humidity sensor", Type: FieldEntity, Domains: []string{"sensor"},
 				Help: "Optional. Shown below the temperature when the widget is tall enough."},
 			labelField,
+			alignField,
 		},
 		render: renderTemperature,
 	})
@@ -122,6 +128,7 @@ func init() {
 		Fields: []Field{
 			{Key: "entity", Label: "Entity", Type: FieldEntity, Domains: []string{"binary_sensor", "switch", "input_boolean", "person", "light", "lock", "cover"}, Required: true},
 			labelField,
+			alignField,
 		},
 		render: renderBinary,
 		alert:  binaryAlert,
@@ -132,6 +139,7 @@ func init() {
 		Fields: []Field{
 			{Key: "format", Label: "Format", Type: FieldSelect, Default: "date", Choices: []Choice{
 				{"date", "Date (Monday, 16 November)"}, {"time", "Time (15:04)"}, {"datetime", "Time and date (15:04 | Monday, 16 November)"}}},
+			alignField,
 		},
 		render: renderClock,
 	})
@@ -142,6 +150,7 @@ func init() {
 			{Key: "text", Label: "Text", Type: FieldText, Required: true},
 			{Key: "size", Label: "Size", Type: FieldSelect, Default: "medium", Choices: []Choice{
 				{"small", "Note (one line)"}, {"medium", "Heading with a rule"}, {"large", "Large"}}},
+			alignField,
 		},
 		render: renderText,
 	})

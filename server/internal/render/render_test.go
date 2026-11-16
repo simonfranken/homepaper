@@ -431,8 +431,21 @@ func TestDepartures(t *testing.T) {
 	if trams := selectDepartures(parseDepartures(e), now, 0, nil, []string{"straßenbahn"}); len(trams) != 2 {
 		t.Errorf("type filter kept %d", len(trams))
 	}
-	if two := selectDepartures(parseDepartures(e), now, 0, []string{"2"}, nil); len(two) != 2 {
+	if two := selectDepartures(parseDepartures(e), now, 0, parseLines("2"), nil); len(two) != 2 {
 		t.Errorf("line filter kept %d", len(two))
+	}
+	// One direction per line: tram 2 towards Stadtbergen only, RB87 and
+	// 506e towards anything, case and spacing ignored.
+	dir := selectDepartures(parseDepartures(e), now, 0, parseLines(" 2 > stadtbergen ; RB87, 506E"), nil)
+	var got2 []string
+	for _, d := range dir {
+		got2 = append(got2, d.line+" "+d.dest)
+	}
+	if want := "RB87 Donauwörth|506e Zusmarshausen Schulzentrum|2 Stadtbergen, Augsburg West P+R"; strings.Join(got2, "|") != want {
+		t.Errorf("per-line direction: %v", got2)
+	}
+	if none := selectDepartures(parseDepartures(e), now, 0, parseLines("2 > Nowhere"), nil); len(none) != 0 {
+		t.Errorf("unknown direction kept %d", len(none))
 	}
 	if walk := selectDepartures(parseDepartures(e), now, 5*time.Minute, nil, nil); len(walk) != 2 || walk[0].line != "2" {
 		t.Errorf("walk filter: %v", walk)

@@ -103,20 +103,50 @@ func truthy(v any) bool {
 	return false
 }
 
+// lineFilter is one entry of the Lines option: a line, optionally only
+// towards destinations containing dest ("2 > Stadtbergen").
+type lineFilter struct{ line, dest string }
+
+// parseLines reads the Lines option: entries separated by commas or
+// semicolons, each "line" or "line > direction".
+func parseLines(s string) []lineFilter {
+	var out []lineFilter
+	for _, item := range strings.FieldsFunc(s, func(r rune) bool { return r == ',' || r == ';' }) {
+		line, dest, _ := strings.Cut(item, ">")
+		line, dest = strings.TrimSpace(line), strings.TrimSpace(dest)
+		if line != "" {
+			out = append(out, lineFilter{line, dest})
+		}
+	}
+	return out
+}
+
+// matches reports whether a departure passes any of the line filters: the
+// line in full, the direction as part of the destination, ignoring case.
+func matchesLines(d departure, lines []lineFilter) bool {
+	for _, f := range lines {
+		if strings.EqualFold(d.line, f.line) &&
+			(f.dest == "" || strings.Contains(strings.ToLower(d.dest), strings.ToLower(f.dest))) {
+			return true
+		}
+	}
+	return false
+}
+
 // selectDepartures keeps what can still be caught: not yet gone, not
 // leaving within walk, matching the line and type filters. Sorted by when
 // each trip really leaves.
-func selectDepartures(ds []departure, now time.Time, walk time.Duration, lines, types []string) []departure {
+func selectDepartures(ds []departure, now time.Time, walk time.Duration, lines []lineFilter, types []string) []departure {
 	from := now.Truncate(time.Minute).Add(walk)
 	var out []departure
 	for _, d := range ds {
 		if d.rt.Before(from) {
 			continue
 		}
-		if len(lines) > 0 && !matchAny(d.line, lines, true) {
+		if len(lines) > 0 && !matchesLines(d, lines) {
 			continue
 		}
-		if len(types) > 0 && !matchAny(d.typ, types, false) {
+		if len(types) > 0 && !matchAny(d.typ, types) {
 			continue
 		}
 		out = append(out, d)
@@ -125,11 +155,10 @@ func selectDepartures(ds []departure, now time.Time, walk time.Duration, lines, 
 	return out
 }
 
-// matchAny matches s against a filter list, whole (lines) or as a part
-// (types), ignoring case.
-func matchAny(s string, list []string, whole bool) bool {
+// matchAny matches s against a filter list as a part, ignoring case.
+func matchAny(s string, list []string) bool {
 	for _, f := range list {
-		if whole && strings.EqualFold(s, f) || !whole && strings.Contains(strings.ToLower(s), strings.ToLower(f)) {
+		if strings.Contains(strings.ToLower(s), strings.ToLower(f)) {
 			return true
 		}
 	}
@@ -157,7 +186,7 @@ func renderDepartures(c *ctx, r R) {
 		return
 	}
 	walk := time.Duration(math.Max(0, c.num("walk", 0))) * time.Minute
-	ds := selectDepartures(parseDepartures(e), c.now, walk, splitList(c.str("lines", "")), splitList(c.str("types", "")))
+	ds := selectDepartures(parseDepartures(e), c.now, walk, parseLines(c.str("lines", "")), splitList(c.str("types", "")))
 
 	f17 := face(fontMedium, 17)
 	if r.H >= 90 {

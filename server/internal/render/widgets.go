@@ -155,7 +155,7 @@ func init() {
 				Help: "A db-infoscreen sensor; its next_departures attribute is shown."},
 			{Key: "label", Label: "Heading", Type: FieldText, Placeholder: "Station name"},
 			{Key: "lines", Label: "Lines", Type: FieldText, Placeholder: "All lines",
-				Help: "Comma-separated, e.g. 2, 506e."},
+				Help: "Comma-separated. Add > and part of the destination for one direction: 2 > Stadtbergen, RB86 > Donauwörth."},
 			{Key: "types", Label: "Types", Type: FieldText, Placeholder: "All types",
 				Help: "Comma-separated parts of the type, e.g. Straßenbahn, Bus."},
 			{Key: "walk", Label: "Hide departures leaving within", Type: FieldNumber, Placeholder: "0 minutes",

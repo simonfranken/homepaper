@@ -57,7 +57,7 @@ var kinds = map[string]*Kind{}
 
 // Kinds lists all widget kinds in a stable order.
 func Kinds() []*Kind {
-	order := []string{"value", "temperature", "climate", "weather", "lights", "binary", "clock", "text"}
+	order := []string{"value", "temperature", "climate", "weather", "lights", "binary", "departures", "clock", "text"}
 	out := make([]*Kind, 0, len(order))
 	for _, n := range order {
 		out = append(out, kinds[n])
@@ -146,6 +146,23 @@ func init() {
 			alignField,
 		},
 		render: renderClock,
+	})
+	register(&Kind{
+		Name: "departures", Label: "Departures", Description: "Next buses, trams and trains from a departures sensor (db-infoscreen).",
+		MinW: 2, MinH: 1, DefaultW: 4, DefaultH: 2,
+		Fields: []Field{
+			{Key: "entity", Label: "Departures sensor", Type: FieldEntity, Domains: []string{"sensor"}, Required: true,
+				Help: "A db-infoscreen sensor; its next_departures attribute is shown."},
+			{Key: "label", Label: "Heading", Type: FieldText, Placeholder: "Station name"},
+			{Key: "lines", Label: "Lines", Type: FieldText, Placeholder: "All lines",
+				Help: "Comma-separated, e.g. 2, 506e."},
+			{Key: "types", Label: "Types", Type: FieldText, Placeholder: "All types",
+				Help: "Comma-separated parts of the type, e.g. Straßenbahn, Bus."},
+			{Key: "walk", Label: "Hide departures leaving within", Type: FieldNumber, Placeholder: "0 minutes",
+				Help: "Minutes you need to get to the stop."},
+			{Key: "platform", Label: "Show the platform", Type: FieldBool, Default: true},
+		},
+		render: renderDepartures,
 	})
 	register(&Kind{
 		Name: "text", Label: "Text", Description: "A static heading or note.",

@@ -9,6 +9,7 @@ import (
 	"image/png"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -23,6 +24,7 @@ var update = flag.Bool("update", false, "rewrite the golden images in docs/desig
 func TestBitmapCoverage(t *testing.T) {
 	strs := []string{unavailable, "Not available", "Set to", "All off", "of on", "°", "·", "%", "...",
 		"Home", "Away", "Locked", "Unlocked", "Open", "Closed", "Detected", "Clear", "On", "Off",
+		"Cancelled · No departures as of",
 		"Disarmed Armed home away night vacation custom Arming Disarming Pending Triggered Off Home Away Night Vacation Custom Disarm Alarm",
 		"0123456789.,-+ ", "Heating Cooling Idle Off Heat Cool Auto Drying Fan",
 		"Mon Tue Wed Thu Fri Sat Sun Monday Tuesday Wednesday Thursday Friday Saturday Sunday",
@@ -378,5 +380,82 @@ func TestInlineHumidity(t *testing.T) {
 	// Without humidity, the same area stays empty.
 	if ink(130, 40, 188, 70) {
 		t.Error("2×1 without a humidity sensor draws something at its right edge")
+	}
+}
+
+// augsburg is the user's db-infoscreen sensor (2026-11-16, 20:56), plus a
+// later tram and a cancelled bus.
+func augsburg() ha.Entity {
+	dep := func(line, typ, dest, plat string, sched, rt float64, cancelled float64) map[string]any {
+		return map[string]any{"line": line, "type": typ, "destination": dest, "platform": plat,
+			"sched_datetime": sched, "rt_datetime": rt, "datetime": rt, "is_cancelled": cancelled,
+			"delay": (rt - sched) / 60, "departure_current": "wrong"}
+	}
+	list := []any{
+		dep("RB86", "R-Bahn", "Dinkelscherben", "1", 1794858720, 1794858900, 0),
+		dep("RB87", "R-Bahn", "Donauwörth", "3", 1794859020, 1794859020, 0),
+		dep("506e", "Regionalbus", "Zusmarshausen Schulzentrum", "B", 1794858960, 1794859140, 0),
+		dep("2", "Straßenbahn", "Stadtbergen, Augsburg West P+R", "D", 1794859140, 1794859140, 0),
+		dep("2", "Straßenbahn", "Haunstetten, Nord", "C", 1794859440, 1794859440, 0),
+		dep("35", "Bus", "Hammerschmiede", "A", 1794859560, 1794859560, 1),
+	}
+	return ha.Entity{ID: "sensor.db_infoscreen_augsburg_oberhausen_departures", State: "20:58", Attributes: map[string]any{
+		"next_departures": list, "station": "Augsburg-Oberhausen", "last_updated": "2026-11-16T20:56:59.261298+01:00",
+		"friendly_name": "DB Infoscreen Augsburg-Oberhausen Departures"}}
+}
+
+func TestDepartures(t *testing.T) {
+	berlin, err := time.LoadLocation("Europe/Berlin")
+	if err != nil {
+		t.Skip("no tz data")
+	}
+	now := time.Date(2026, 11, 16, 20, 56, 30, 0, berlin)
+	e := augsburg()
+	got := selectDepartures(parseDepartures(e), now, 0, nil, nil)
+	var order []string
+	for _, d := range got {
+		order = append(order, d.line+" "+d.rt.In(berlin).Format("15:04"))
+	}
+	// RB86 left at 20:55 (20:52 +3) and is gone; 506e (20:56 +3) sorts by
+	// its real time; times come from rt_datetime, not departure_current.
+	want := "RB87 20:57,506e 20:59,2 20:59,2 21:04,35 21:06"
+	if strings.Join(order, ",") != want {
+		t.Errorf("order %v, want %s", order, want)
+	}
+	if d := got[1]; d.delay() != 3 {
+		t.Errorf("506e delay %d", d.delay())
+	}
+	if !got[4].cancelled {
+		t.Error("35 not cancelled")
+	}
+	if trams := selectDepartures(parseDepartures(e), now, 0, nil, []string{"straßenbahn"}); len(trams) != 2 {
+		t.Errorf("type filter kept %d", len(trams))
+	}
+	if two := selectDepartures(parseDepartures(e), now, 0, []string{"2"}, nil); len(two) != 2 {
+		t.Errorf("line filter kept %d", len(two))
+	}
+	if walk := selectDepartures(parseDepartures(e), now, 5*time.Minute, nil, nil); len(walk) != 2 || walk[0].line != "2" {
+		t.Errorf("walk filter: %v", walk)
+	}
+
+	st := demoStates(t)
+	st.Set(e.ID, &e)
+	w := func(id string, x, y, ww, h int, opts map[string]any) store.Widget {
+		opts["entity"] = e.ID
+		return store.Widget{ID: id, Kind: "departures", X: x, Y: y, W: ww, H: h, Options: opts}
+	}
+	l := store.Layout{Cols: 8, Rows: 6, Widgets: []store.Widget{
+		w("a", 0, 0, 4, 4, map[string]any{}),
+		w("b", 4, 0, 4, 2, map[string]any{"types": "Straßenbahn"}),
+		w("c", 4, 2, 2, 2, map[string]any{}),
+		w("d", 6, 2, 2, 2, map[string]any{"walk": 10.0}),
+		w("e", 0, 4, 4, 1, map[string]any{}),
+		w("f", 4, 4, 4, 2, map[string]any{"lines": "9"}),
+		w("g", 0, 5, 4, 1, map[string]any{"entity": "sensor.gone"}),
+	}}
+	l.Widgets[6].Options["entity"] = "sensor.gone"
+	g := Render(l, store.DefaultPanel, st, now).ToGray()
+	if dir := os.Getenv("HOMEPAPER_RENDER_OUT"); dir != "" {
+		writePNG(t, filepath.Join(dir, "departures.png"), g)
 	}
 }

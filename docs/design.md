@@ -74,6 +74,7 @@ The structure stays as built (header with display tabs, Layout/Display switch, e
 | Weather | 2×1: icon + temperature | 4×2: condition, high/low (▲▼), humidity, 5-day strip | forecast, humidity, high/low, condition |
 | Lights | 1 row: header + a row of bulbs | one row per light (≤ 46 px), brightness bars from 3 wide | bars, then names |
 | State | 1×1: label 14, icon + word 20 (icon goes if the word doesn't fit) | 2×1: label 17, icon + word Lucida Bold 25. Several entities: one row each, alert rows inverted | icon; in a list, the name before the state |
+| Departures | 1 row: two departures at 14 px, no heading | heading + "as of"; 34 px rows: line sign, destination, platform (3+ wide), actual time, inverted delay tag | platform, then destination |
 | Date / time | time alone: Go Bold 56 | time + rule + day (bold 20) and date (17) stacked | – |
 | Text | note: Lucida 17, one line, "..." | heading: Lucida Bold 25 + 2 px rule to the edge | – |
 

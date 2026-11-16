@@ -25,6 +25,8 @@ When an item changes status, update it here (status, date, rationale) and in the
 | [D-011](#d-011) | Renderer: native Go, server-rendered preview | Decided |
 | [D-012](#d-012) | Firmware: Rust + esp-idf-svc | Decided |
 | [D-013](#d-013) | HA URL and token configured in the web UI | Decided, implemented |
+| [D-014](#d-014) | One design language for web UI and panel | Decided, not implemented |
+| [D-015](#d-015) | Panel redesign: widgets, rules, inversion | Decided, not implemented |
 | [P-001](#p-001) | ~~Server stack: TypeScript / Node~~ | Superseded by D-009, D-010 |
 | [P-002](#p-002) | ~~Renderer: Satori + resvg~~ | Superseded by D-011 |
 | [P-003](#p-003) | Layout model: snap grid (e.g. 8×6) | Proposed |
@@ -96,6 +98,26 @@ When an item changes status, update it here (status, date, rationale) and in the
 - Settings are saved in `homepaper.json` (key `home_assistant`) and the source switches without a restart.
 - The token is never sent back to the browser. An empty token field keeps the saved token, but only for the same host and port, and never from `https` down to `http`. Otherwise anyone who can open the UI could have the server send the token to an address of their choice.
 - **Precedence (implementation choice, not yet confirmed by the project owner):** settings saved in the UI win over `HA_URL`/`HA_TOKEN` from the environment or `server/.env`, which remain as a fallback for headless setups. With neither, the server shows demo entities. The server logs which source it uses at startup, and warns when it ignores `HA_URL`. Removing the connection in the UI falls back to the environment.
+
+### D-014
+**One design language for the web UI and the panel** (2026-11-16). The project owner approved the web UI design. Rationale: the panel can only show 1-bit black and white, so the web UI takes its rules from the panel and doesn't invent a second look:
+- the same type scale (12/14/17/20/25/34) and the same family: Go fonts in the UI, matching the panel's Lucida bitmaps;
+- 2 px ink strokes and an 8 px radius;
+- patterns instead of greys;
+- status shown by fill, not colour.
+
+One functional accent, editor blue, marks only what never reaches the panel. Details in [design.md](design.md#shared-language-d-014).
+
+### D-015
+**Panel redesign** (2026-11-16). The project owner approved the panel mockups:
+- large Go Bold values with a small raised decimal;
+- three text levels;
+- **2 px column rules as the default divider**, with frames kept as a layout-wide option that replaces the per-widget `border` option;
+- inversion only for states that need action (open doors, windows and garages, unlocked locks);
+- icons that draw the state;
+- per-kind rules for what drops as a widget shrinks.
+
+Built on the 8 × 6 grid, which is still [P-003](#p-003). The 5-day weather strip needs `weather.get_forecasts`. Details and mockups in [design.md](design.md#panel-d-015).
 
 ## Proposed
 

@@ -41,7 +41,8 @@ Next: flash the S3 and check the connection and setup on real hardware, then ord
 
 ## M4: polish and frame build
 
-- The v1 widget catalogue complete. Fonts and icons tuned for 1 bit.
+- The v1 widget catalogue complete. Fonts and icons tuned for 1 bit: implement the panel redesign ([D-015](decisions.md#d-015)), including `weather.get_forecasts` for the forecast strip.
+- Restyle the web UI to the shared design language ([D-014](decisions.md#d-014)).
 - Docker image and setup docs.
 - The frame build, see [hardware.md](hardware.md#frame-build).
 - **Done when** it hangs on the wall and runs unattended.

@@ -8,6 +8,7 @@
 | [device-protocol.md](device-protocol.md) | Server ↔ ESP32 protocol (draft) |
 | [rendering.md](rendering.md) | Rendering pipeline, e-ink specifics, update strategy |
 | [widgets.md](widgets.md) | Widget model and the v1 widget catalogue |
+| [design.md](design.md) | Design language, web UI and panel design, with panel mockups |
 | [roadmap.md](roadmap.md) | Milestones |
 | [decisions.md](decisions.md) | Decision log: Decided, Proposed or Open |
 

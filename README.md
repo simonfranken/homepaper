@@ -107,5 +107,6 @@ Design notes and decisions are in [`docs/`](docs/README.md):
 - [Architecture](docs/architecture.md): components, data flow, code map
 - [Device protocol](docs/device-protocol.md): the v1 wire format
 - [Hardware](docs/hardware.md): panel, wiring, frame build
+- [Design](docs/design.md): the shared design language, the web UI and the panel redesign
 - [Decisions](docs/decisions.md): what is decided, proposed or open
 - [Roadmap](docs/roadmap.md): milestones and current status

@@ -46,4 +46,4 @@ Possible later additions: history chart or sparkline, calendar or agenda, waste 
 - ~~The schema for widget definitions~~: done (`render.Kind` / `render.Field`).
 - ~~How to show unavailable or unknown entity states~~: shown as "–" for now.
 - Per-widget minimum update intervals ([D-005](decisions.md#d-005)). Only a per-device minimum interval exists so far.
-- Themes, fonts and icon set (it must stay crisp at 1 bit; see [rendering.md](rendering.md)).
+- ~~Themes, fonts and icon set~~: decided as the panel redesign ([D-015](decisions.md#d-015)). [design.md](design.md#widgets) has each kind's layout at every size and what it drops first. Not implemented yet.

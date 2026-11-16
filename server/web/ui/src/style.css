@@ -1,11 +1,11 @@
 /*
-  homepaper editor.
+  homepaper editor (D-014, docs/design.md).
 
-  One rule drives the palette: black is what the panel prints, blue is what
-  only the editor shows. Print designers mark up layouts in non-photo blue
-  because it does not reproduce; selection, guides and every control that
-  acts on the layout use it here for the same reason. Greys are cool, so the
-  white panel preview is the warmest, brightest thing on the page.
+  The panel's constraints set the rules: ink on paper, 2 px strokes, an
+  8 px radius and the panel's type scale (12/14/17/20/25/34). Where a web
+  UI would use grey, a 1-bit dot screen or hatch stands in. Status is told
+  by fill, not colour. One accent, editor blue, marks only what never
+  reaches the panel: selection, guides, focus and links.
 
   Text is set in the Go typeface, served by the Go server from the same font
   data the renderer draws the panel with.
@@ -37,54 +37,33 @@
 }
 
 :root {
-  --desk: #e3e8eb;
-  --sheet: #f8fafb;
-  --ink: #14191c;
-  --muted: #55616a;
-  --rule: #c2cbd1;
-  --rule-soft: #d7dee2;
-  --blue: #1269b8;
-  --blue-strong: #0d5496;
-  --blue-wash: #d9eaf7;
-  --on-blue: #ffffff;
-  --ok: #1b7f47;
-  --warn: #9a5b00;
-  --warn-wash: #fbeccd;
-  --bad: #b3312a;
-  --bezel: #23282b;
+  --paper: #f3f2ec;
+  --sheet: #ffffff;
+  --ink: #111111;
+  --muted: #55554f;
+  --faint: #8a8a82;
+  --line-off: #c9c8c0;
+  --blue: #1d4ed8;
+  --blue-strong: #1e3a8a;
+  --blue-wash: rgb(29 78 216 / 0.08);
+  --bad: #b42318;
+  --on-ink: #ffffff;
+  --bezel: #111111;
 
-  --text-s: 13px;
-  --text-m: 15px;
-  --text-l: 18px;
-  --text-xl: 24px;
-  --radius: 4px;
+  --t12: 12px;
+  --t14: 14px;
+  --t17: 17px;
+  --t20: 20px;
+  --t25: 25px;
+  --t34: 34px;
+  --radius: 8px;
 
   font-family: 'Go', system-ui, sans-serif;
-  font-size: var(--text-m);
+  font-size: var(--t14);
   line-height: 1.45;
   color: var(--ink);
-  background: var(--desk);
-  color-scheme: light dark;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --desk: #12171a;
-    --sheet: #1b2226;
-    --ink: #e7edf0;
-    --muted: #98a5ad;
-    --rule: #3a454c;
-    --rule-soft: #2a3338;
-    --blue: #62b2ee;
-    --blue-strong: #8cc7f4;
-    --blue-wash: #17354d;
-    --on-blue: #0b1a26;
-    --ok: #5cc48a;
-    --warn: #e5ac55;
-    --warn-wash: #3d2e10;
-    --bad: #ee8079;
-    --bezel: #050708;
-  }
+  background: var(--paper);
+  color-scheme: light;
 }
 
 * {
@@ -93,203 +72,335 @@
 
 body {
   margin: 0;
-  background: var(--desk);
+  background: var(--paper);
 }
 
 h1,
 h2,
 h3,
-p {
+p,
+ul,
+ol,
+dl,
+dd {
   margin: 0;
 }
 
 h2 {
-  font-size: var(--text-xl);
+  font-size: var(--t25);
   font-weight: 700;
-  letter-spacing: -0.01em;
   line-height: 1.2;
 }
 
 h3 {
-  font-size: var(--text-m);
+  font-size: var(--t20);
   font-weight: 700;
+  line-height: 1.2;
 }
 
 a {
   color: var(--blue);
 }
+a:hover {
+  color: var(--blue-strong);
+}
+
+/* ---- Buttons ----------------------------------------------------------- */
 
 button,
 .button {
   font: inherit;
+  font-size: var(--t14);
   font-weight: 500;
+  line-height: 1;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  min-height: 34px;
-  padding: 5px 12px;
-  border: 1px solid var(--rule);
+  gap: 8px;
+  min-height: 40px;
+  padding: 0 14px;
+  border: 2px solid var(--ink);
   border-radius: var(--radius);
   background: var(--sheet);
   color: var(--ink);
   text-decoration: none;
+  white-space: nowrap;
   cursor: pointer;
 }
 
 button:hover:not(:disabled),
 .button:hover {
-  border-color: var(--blue);
-  color: var(--blue-strong);
+  background: var(--ink);
+  color: var(--on-ink);
 }
 
 button:disabled {
-  opacity: 0.45;
+  color: var(--faint);
+  border-color: var(--line-off);
+  background: var(--sheet);
   cursor: default;
 }
 
 button.primary,
 .button.primary {
-  background: var(--blue);
-  border-color: var(--blue);
-  color: var(--on-blue);
+  background: var(--ink);
+  color: var(--on-ink);
 }
 
 button.primary:hover:not(:disabled),
 .button.primary:hover {
-  background: var(--blue-strong);
-  border-color: var(--blue-strong);
-  color: var(--on-blue);
+  background: #3a3a36;
+}
+
+button.primary:disabled,
+button.danger:disabled {
+  color: var(--faint);
+  border-color: var(--line-off);
+  background: var(--sheet);
 }
 
 button.danger {
   color: var(--bad);
+  border-color: var(--bad);
 }
 
 button.danger:hover:not(:disabled) {
-  border-color: var(--bad);
-  color: var(--bad);
+  background: var(--bad);
+  color: #fff;
+}
+
+button.danger.solid {
+  background: var(--bad);
+  color: #fff;
 }
 
 button.quiet {
   border-color: transparent;
-  background: none;
+  background: transparent;
 }
 
-button.small {
-  min-height: 28px;
-  padding: 2px 9px;
-  font-size: var(--text-s);
+button.quiet:hover:not(:disabled) {
+  border-color: var(--ink);
+  background: var(--sheet);
+  color: var(--ink);
 }
+
+button.danger.quiet:hover:not(:disabled) {
+  border-color: var(--bad);
+  color: var(--bad);
+}
+
+button.small,
+.button.small {
+  min-height: 32px;
+  padding: 0 10px;
+  gap: 6px;
+  font-size: var(--t12);
+}
+
+button svg,
+.button svg {
+  flex: none;
+}
+
+/* ---- Inputs ------------------------------------------------------------ */
 
 input,
 select {
   font: inherit;
+  font-size: var(--t14);
   width: 100%;
-  min-height: 34px;
-  padding: 5px 9px;
-  border: 1px solid var(--rule);
+  min-height: 40px;
+  padding: 0 12px;
+  border: 2px solid var(--ink);
   border-radius: var(--radius);
   background: var(--sheet);
   color: var(--ink);
 }
 
 input::placeholder {
-  color: var(--muted);
-  opacity: 0.8;
+  color: #6b6b64;
 }
 
-input[type='checkbox'] {
-  width: 16px;
-  height: 16px;
+input[type='checkbox'],
+input[type='radio'] {
+  width: 20px;
+  height: 20px;
   min-height: 0;
-  accent-color: var(--blue);
+  margin: 0;
+  padding: 0;
+  accent-color: var(--ink);
 }
 
 :focus-visible {
-  outline: 2px solid var(--blue);
-  outline-offset: 1px;
+  outline: 3px solid var(--blue);
+  outline-offset: 2px;
 }
 
 label {
   display: block;
-  font-size: var(--text-s);
-  font-weight: 500;
-  margin-bottom: 4px;
+  font-size: var(--t14);
+  font-weight: 700;
+  margin-bottom: 6px;
 }
 
 kbd {
-  font: inherit;
-  font-size: 12px;
+  font-family: 'Go Mono', ui-monospace, monospace;
+  font-size: var(--t12);
   padding: 0 5px;
-  border: 1px solid var(--rule);
-  border-bottom-width: 2px;
-  border-radius: 3px;
+  border: 2px solid var(--ink);
+  border-bottom-width: 3px;
+  border-radius: 4px;
   background: var(--sheet);
+  color: var(--ink);
   white-space: nowrap;
 }
 
+/* ---- Cards, dialogs ---------------------------------------------------- */
+
+.card {
+  background: var(--sheet);
+  border: 2px solid var(--ink);
+  border-radius: var(--radius);
+}
+
+.cap {
+  font-size: var(--t12);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* Dialogs cast a hard shadow over a 1-bit dot screen, never a grey veil. */
 dialog {
-  width: min(460px, calc(100vw - 32px));
+  width: min(440px, calc(100vw - 32px));
   padding: 24px;
-  border: 1px solid var(--rule);
-  border-radius: 6px;
+  border: 2px solid var(--ink);
+  border-radius: 12px;
   background: var(--sheet);
   color: var(--ink);
+  box-shadow: 6px 6px 0 var(--ink);
 }
 
 dialog::backdrop {
-  background: rgb(10 16 20 / 0.45);
+  background-color: rgb(228 227 220 / 0.85);
+  background-image: radial-gradient(#111 0.8px, transparent 1px);
+  background-size: 5px 5px;
 }
+
+/* ---- Text -------------------------------------------------------------- */
 
 .muted {
   color: var(--muted);
 }
 
 .small {
-  font-size: var(--text-s);
+  font-size: var(--t12);
 }
 
 .mono {
   font-family: 'Go Mono', ui-monospace, Menlo, monospace;
-  font-size: var(--text-s);
+  font-size: var(--t12);
   word-break: break-all;
 }
 
+/* ---- Status dots: fill carries the state ------------------------------- */
+
 .dot {
   display: inline-block;
-  width: 9px;
-  height: 9px;
+  width: 12px;
+  height: 12px;
   border-radius: 50%;
-  border: 1.5px solid var(--muted);
+  border: 2px solid var(--ink);
   flex: none;
 }
 
+/* online and in sync / connected */
 .dot.ok {
-  background: var(--ok);
-  border-color: var(--ok);
+  background: var(--ink);
 }
 
+/* online, catching up */
 .dot.warn {
-  background: var(--warn);
-  border-color: var(--warn);
+  background: linear-gradient(90deg, var(--ink) 50%, transparent 50%);
 }
 
-.dot.bad {
-  background: var(--bad);
-  border-color: var(--bad);
+/* not connected yet, demo data */
+.dot.never,
+.dot.demo {
+  background-image: radial-gradient(var(--ink) 0.9px, transparent 1.1px);
+  background-size: 3px 3px;
 }
+
+/* unreachable */
+.dot.bad {
+  border-color: var(--bad);
+  background: linear-gradient(45deg, transparent 40%, var(--bad) 40%, var(--bad) 60%, transparent 60%);
+}
+
+.dot.big {
+  width: 16px;
+  height: 16px;
+}
+
+/* ---- Messages ---------------------------------------------------------- */
 
 .error {
   color: var(--bad);
-  font-size: var(--text-s);
+  font-size: var(--t14);
+  font-weight: 500;
 }
 
+/* A box for a problem the user should fix. */
+.error.box {
+  display: flex;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 2px solid var(--bad);
+  border-radius: var(--radius);
+}
+
+/* A warning: dashed, ink, with the reason in words. */
 .notice {
-  padding: 8px 12px;
-  border-left: 3px solid var(--warn);
-  background: var(--warn-wash);
-  font-size: var(--text-s);
+  padding: 10px 12px;
+  border: 2px dashed var(--ink);
+  border-radius: var(--radius);
+  background: var(--sheet);
+  font-size: var(--t14);
+}
+
+.notice.bad {
+  border: 2px solid var(--bad);
+  color: var(--bad);
+  font-weight: 500;
+}
+
+.ok-box {
+  display: flex;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 2px solid var(--ink);
+  border-radius: var(--radius);
+  font-weight: 500;
+}
+
+/* Spinner: a ring with a gap. */
+.spin {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.9s linear infinite;
+  flex: none;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

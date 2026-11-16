@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { GridLayout, GridItem } from 'grid-layout-plus'
-import { api, type Device, type Entity, type Layout, type Widget, type WidgetKind } from '../api'
+import { api, type Device, type Dividers, type Entity, type Layout, type Widget, type WidgetKind } from '../api'
+import Icon from './Icon.vue'
 import WidgetForm from './WidgetForm.vue'
 
 const props = defineProps<{ device: Device; kinds: WidgetKind[]; entities: Entity[]; previewVersion: number }>()
@@ -44,6 +45,27 @@ const aspect = computed(() => props.device.panel.height / props.device.panel.wid
 const rowHeight = computed(() => (width.value * aspect.value) / layout.value.rows)
 const colWidth = computed(() => width.value / layout.value.cols)
 const exactPixels = computed(() => Math.abs(width.value - props.device.panel.width) < 0.5)
+const scalePercent = computed(() => Math.round((width.value / props.device.panel.width) * 100))
+// A scaled 1-bit image turns grey and soft in the browser, which the panel
+// never does. "Actual size" shows one panel pixel per CSS pixel and lets
+// the stage scroll instead.
+const ACTUAL_KEY = 'homepaper.actualSize'
+const actualSize = ref(readActual())
+function readActual() {
+  try {
+    return localStorage.getItem(ACTUAL_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+watch(actualSize, (v) => {
+  try {
+    if (v) localStorage.setItem(ACTUAL_KEY, '1')
+    else localStorage.removeItem(ACTUAL_KEY)
+  } catch {
+    /* private mode: the toggle still works for this page */
+  }
+})
 let ro: ResizeObserver | undefined
 onMounted(() => {
   ro = new ResizeObserver(([e]) => (width.value = e.contentRect.width))
@@ -238,6 +260,15 @@ function removeWidget(id: string) {
   scheduleSave()
 }
 
+// Rules or frames between widgets: one setting for the whole layout (D-015).
+const dividers = computed<Dividers>(() => layout.value.dividers || 'rules')
+function setDividers(v: Dividers) {
+  if (v === dividers.value) return
+  record()
+  layout.value.dividers = v
+  scheduleSave()
+}
+
 function updateOptions(w: Widget, options: Record<string, unknown>, key: string) {
   record(`opt:${w.id}:${key}`)
   w.options = options
@@ -307,191 +338,283 @@ const modKey = isMac ? '⌘' : 'Ctrl'
   <section class="editor">
     <div class="stage">
       <div class="bar">
-        <div class="history">
-          <button class="small" :disabled="!undoStack.length" :title="`Undo (${modKey}+Z)`" @click="undo">Undo</button>
-          <button class="small" :disabled="!redoStack.length" :title="`Redo (${modKey}+Shift+Z)`" @click="redo">Redo</button>
+        <div class="group">
+          <button class="small" :disabled="!undoStack.length" :title="`Undo (${modKey}+Z)`" @click="undo">
+            <Icon name="undo" :size="14" :stroke="3" />
+            Undo
+          </button>
+          <button class="small" :disabled="!redoStack.length" :title="`Redo (${modKey}+Shift+Z)`" @click="redo">
+            <Icon name="redo" :size="14" :stroke="3" />
+            Redo
+          </button>
+        </div>
+        <div class="group" role="group" aria-label="Between widgets">
+          <span class="small muted">Dividers</span>
+          <div class="seg">
+            <button
+              class="small"
+              :aria-pressed="dividers === 'rules'"
+              :class="{ on: dividers === 'rules' }"
+              title="2 px rules in the gaps between widgets"
+              @click="setDividers('rules')"
+            >
+              Rules
+            </button>
+            <button
+              class="small"
+              :aria-pressed="dividers === 'frames'"
+              :class="{ on: dividers === 'frames' }"
+              title="A rounded frame around every widget"
+              @click="setDividers('frames')"
+            >
+              Frames
+            </button>
+          </div>
+        </div>
+        <div class="group">
+          <span v-if="!exactPixels && !actualSize" class="small muted">Shown at {{ scalePercent }} %</span>
+          <button
+            v-if="!exactPixels || actualSize"
+            class="small"
+            :aria-pressed="actualSize"
+            title="Show one panel pixel per screen pixel"
+            @click="actualSize = !actualSize"
+          >
+            <Icon name="actual" :size="14" />
+            {{ actualSize ? 'Fit to window' : 'Actual size' }}
+          </button>
         </div>
         <span class="save small" :class="saveState" role="status">
           <template v-if="saveState === 'error'">
+            <Icon name="warn" :size="14" />
             Not saved: {{ saveError }}
             <button class="small" @click="save">Try again</button>
           </template>
-          <template v-else>{{ saveState === 'saving' ? 'Saving…' : 'All changes saved' }}</template>
+          <template v-else-if="saveState === 'saving'"><span class="spin"></span> Saving…</template>
+          <template v-else><Icon name="check" :size="14" :stroke="3" /> All changes saved</template>
         </span>
       </div>
 
-      <div
-        class="bezel"
-        :style="{ maxWidth: `${device.panel.width + 28}px` }"
-      >
+      <div class="scroller" :class="{ actual: actualSize }">
         <div
-          ref="frameEl"
-          class="frame"
-          :class="{ dragging }"
-          :style="{
-            aspectRatio: `${device.panel.width} / ${device.panel.height}`,
-            '--col': `${colWidth}px`,
-            '--row': `${rowHeight}px`,
-          }"
-          @pointerdown="onFramePointerDown"
+          class="bezel"
+          :style="actualSize ? { width: `${device.panel.width + 28}px` } : { maxWidth: `${device.panel.width + 28}px` }"
         >
-          <img
-            class="preview"
-            :class="{ exact: exactPixels }"
-            :src="previewSrc"
-            alt="The frame as the display shows it"
-            draggable="false"
-          />
-          <div class="guides" aria-hidden="true"></div>
-          <GridLayout
-            v-model:layout="gridItems"
-            :col-num="layout.cols"
-            :row-height="rowHeight"
-            :max-rows="layout.rows"
-            :margin="[0, 0]"
-            :vertical-compact="false"
-            :prevent-collision="true"
-            :is-bounded="true"
-            :auto-size="false"
-            @layout-updated="onLayoutUpdated"
+          <div
+            ref="frameEl"
+            class="frame"
+            :class="{ dragging }"
+            :style="{
+              aspectRatio: `${device.panel.width} / ${device.panel.height}`,
+              '--col': `${colWidth}px`,
+              '--row': `${rowHeight}px`,
+            }"
+            @pointerdown="onFramePointerDown"
           >
-            <GridItem
-              v-for="item in gridItems"
-              :key="item.i"
-              :i="item.i"
-              :x="item.x"
-              :y="item.y"
-              :w="item.w"
-              :h="item.h"
-              :min-w="item.minW"
-              :min-h="item.minH"
-              class="cell"
-              :class="{ selected: item.i === selectedId, problem: problems[item.i] }"
-              @pointerdown="selectedId = String(item.i)"
-              @move="dragging = true"
-              @resize="dragging = true"
-              @moved="dragging = false"
-              @resized="dragging = false"
+            <img
+              class="preview"
+              :class="{ exact: exactPixels }"
+              :src="previewSrc"
+              alt="The frame as the display shows it"
+              draggable="false"
+            />
+            <div class="guides" aria-hidden="true"></div>
+            <GridLayout
+              v-model:layout="gridItems"
+              :col-num="layout.cols"
+              :row-height="rowHeight"
+              :max-rows="layout.rows"
+              :margin="[0, 0]"
+              :vertical-compact="false"
+              :prevent-collision="true"
+              :is-bounded="true"
+              :auto-size="false"
+              @layout-updated="onLayoutUpdated"
             >
-              <span class="tag">{{ kindByName[widgetById[item.i]?.kind ?? '']?.label }}</span>
-              <span v-if="problems[item.i]" class="flag">{{ problems[item.i] }}</span>
-            </GridItem>
-          </GridLayout>
-          <div v-if="!layout.widgets.length" class="blank">
-            <p>This display is empty.</p>
-            <p class="muted small">Add a widget from the list to start the layout.</p>
+              <GridItem
+                v-for="item in gridItems"
+                :key="item.i"
+                :i="item.i"
+                :x="item.x"
+                :y="item.y"
+                :w="item.w"
+                :h="item.h"
+                :min-w="item.minW"
+                :min-h="item.minH"
+                class="cell"
+                :class="{ selected: item.i === selectedId, problem: problems[item.i] }"
+                @pointerdown="selectedId = String(item.i)"
+                @move="dragging = true"
+                @resize="dragging = true"
+                @moved="dragging = false"
+                @resized="dragging = false"
+              >
+                <span class="tag">{{ kindByName[widgetById[item.i]?.kind ?? '']?.label }}</span>
+                <span v-if="problems[item.i]" class="flag">
+                  <Icon name="warn" :size="12" :stroke="3" />
+                  {{ problems[item.i] }}
+                </span>
+              </GridItem>
+            </GridLayout>
+            <div v-if="!layout.widgets.length" class="blank">
+              <p class="blank-title">This display is empty.</p>
+              <p class="small">Add a widget from the list to start the layout.</p>
+            </div>
           </div>
         </div>
       </div>
 
-      <p v-if="notice" class="notice note" role="status">
-        {{ notice }}
+      <p v-if="notice" class="toast" role="status">
+        <span>{{ notice }}</span>
         <button v-if="notice === 'Widget removed.'" class="small" @click="undo">Undo</button>
       </p>
-      <p class="hint muted small">
+      <p class="hint small muted">
         Drag a widget to move it, drag its corner to resize. With a widget selected:
         <kbd>←</kbd> <kbd>→</kbd> <kbd>↑</kbd> <kbd>↓</kbd> move, <kbd>Shift</kbd> + arrows resize,
-        <kbd>{{ modKey }}</kbd> <kbd>D</kbd> duplicates, <kbd>Del</kbd> removes.
+        <kbd>{{ modKey }}</kbd> <kbd>D</kbd> duplicates, <kbd>Del</kbd> removes, <kbd>Esc</kbd> deselects.
       </p>
     </div>
 
-    <aside class="inspector">
-      <div v-if="selectedWidget && selectedKind" class="pane">
+    <aside class="inspector" aria-label="Inspector">
+      <section v-if="selectedWidget && selectedKind" class="card pane">
         <div class="pane-head">
-          <h3>{{ selectedKind.label }}</h3>
+          <div class="who">
+            <span class="kind-icon solid"><Icon :name="selectedKind.name" :size="20" /></span>
+            <div>
+              <h3>{{ selectedKind.label }}</h3>
+              <p class="mono muted">
+                {{ selectedWidget.w }} × {{ selectedWidget.h }} cells · column {{ selectedWidget.x + 1 }}, row
+                {{ selectedWidget.y + 1 }}
+              </p>
+            </div>
+          </div>
           <button class="quiet small" title="Deselect (Esc)" @click="selectedId = undefined">Done</button>
         </div>
-        <p v-if="problems[selectedWidget.id]" class="notice">
-          {{
-            problems[selectedWidget.id] === 'Choose an entity'
-              ? 'Choose what this widget shows. Until then the display draws a dash.'
-              : 'An entity this widget uses is not in Home Assistant right now, so the display draws a dash.'
-          }}
-        </p>
-        <WidgetForm
-          :key="selectedWidget.id + ':' + formVersion"
-          :kind="selectedKind"
-          :options="selectedWidget.options"
-          :entities="entities"
-          @update="(o, key) => updateOptions(selectedWidget!, o, key)"
-        />
-        <div class="pane-actions">
-          <button class="small" :title="`Duplicate (${modKey}+D)`" @click="duplicate">Duplicate</button>
-          <button class="small danger" title="Remove (Del)" @click="removeWidget(selectedWidget.id)">Remove</button>
+        <div class="pane-body">
+          <p v-if="problems[selectedWidget.id]" class="notice bad" role="status">
+            <Icon name="warn" :size="18" />
+            {{
+              problems[selectedWidget.id] === 'Choose an entity'
+                ? 'Choose what this widget shows. Until then the display draws a dash.'
+                : 'An entity this widget uses is not in Home Assistant right now, so the display draws a dash.'
+            }}
+          </p>
+          <WidgetForm
+            :key="selectedWidget.id + ':' + formVersion"
+            :kind="selectedKind"
+            :options="selectedWidget.options"
+            :entities="entities"
+            @update="(o, key) => updateOptions(selectedWidget!, o, key)"
+          />
         </div>
-      </div>
+        <div class="pane-actions">
+          <button class="small" :title="`Duplicate (${modKey}+D)`" @click="duplicate">
+            <Icon name="copy" :size="14" />
+            Duplicate
+          </button>
+          <button class="small danger" title="Remove (Del)" @click="removeWidget(selectedWidget.id)">
+            <Icon name="trash" :size="14" />
+            Remove
+          </button>
+        </div>
+      </section>
 
-      <div class="pane">
+      <section class="card palette-pane">
         <h3>Add a widget</h3>
         <ul class="palette">
           <li v-for="k in kinds" :key="k.name">
             <button @click="addWidget(k)">
-              <span class="k-label">{{ k.label }}</span>
-              <span class="k-desc muted small">{{ k.description }}</span>
+              <span class="kind-icon"><Icon :name="k.name" :size="18" /></span>
+              <span class="k-text">
+                <span class="k-label">{{ k.label }}</span>
+                <span class="k-desc">{{ k.description }}</span>
+              </span>
+              <span class="k-size">{{ k.default_w }}×{{ k.default_h }}</span>
             </button>
           </li>
         </ul>
-      </div>
+      </section>
     </aside>
   </section>
 </template>
 
 <style scoped>
 .editor {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 330px;
+  display: flex;
+  flex-wrap: wrap;
   gap: 28px;
-  align-items: start;
+  align-items: flex-start;
 }
 
 .stage {
+  flex: 999 1 560px;
   min-width: 0;
-  max-width: 828px;
+  max-width: 860px;
 }
 
 .bar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  min-height: 28px;
-  margin-bottom: 10px;
+  gap: 8px 16px;
+  margin-bottom: 12px;
 }
 
-.history {
+.group {
   display: flex;
+  align-items: center;
   gap: 6px;
 }
 
+.seg {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  border: 2px solid var(--ink);
+  border-radius: var(--radius);
+  background: var(--sheet);
+}
+
+.seg button {
+  min-height: 26px;
+  border: 0;
+  border-radius: 5px;
+}
+
+.seg button.on,
+.seg button.on:hover:not(:disabled) {
+  background: var(--ink);
+  color: var(--on-ink);
+}
+
 .save {
-  display: flex;
+  margin-left: auto;
+  display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   color: var(--muted);
 }
 
 .save.error {
   color: var(--bad);
+  font-weight: 500;
 }
 
-/* The panel is the one object on the page drawn as a thing: a dark bezel
-   around a white sheet, lifted off the desk. */
+.scroller.actual {
+  overflow-x: auto;
+}
+
+/* The panel in its picture frame: a black bezel around the white sheet. */
 .bezel {
   padding: 14px;
-  border-radius: 5px;
+  border-radius: 12px;
   background: var(--bezel);
-  box-shadow:
-    0 1px 0 rgb(255 255 255 / 0.08) inset,
-    0 14px 30px -12px rgb(10 25 35 / 0.45);
 }
 
 .frame {
-  --vgl-placeholder-bg: var(--edit);
-  --vgl-placeholder-opacity: 22%;
-  --vgl-resizer-border-color: var(--edit);
-  /* The preview is always white, so editor marks use the light-theme blue
-     in both themes. */
-  --edit: #1269b8;
+  --vgl-placeholder-bg: var(--blue);
+  --vgl-placeholder-opacity: 18%;
+  --vgl-resizer-border-color: var(--blue);
   position: relative;
   width: 100%;
   background: #fff;
@@ -511,16 +634,16 @@ const modKey = isMac ? '⌘' : 'Ctrl'
   image-rendering: pixelated;
 }
 
-/* Cell guides, shown while a widget moves so the snap grid is visible. */
+/* The snap grid, faint at rest and clear while a widget moves. */
 .guides {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  opacity: 0;
+  opacity: 0.5;
   transition: opacity 0.12s;
   background-image:
-    linear-gradient(to right, rgb(18 105 184 / 0.35) 1px, transparent 1px),
-    linear-gradient(to bottom, rgb(18 105 184 / 0.35) 1px, transparent 1px);
+    linear-gradient(to right, rgb(29 78 216 / 0.3) 1px, transparent 1px),
+    linear-gradient(to bottom, rgb(29 78 216 / 0.3) 1px, transparent 1px);
   background-size: var(--col) var(--row);
 }
 
@@ -535,20 +658,24 @@ const modKey = isMac ? '⌘' : 'Ctrl'
 }
 
 .cell {
-  border-radius: 3px;
-  outline: 2px solid transparent;
-  outline-offset: -3px;
+  border-radius: 9px;
+  outline: 3px solid transparent;
+  outline-offset: -2px;
   cursor: move;
   touch-action: none;
 }
 
 .cell:hover {
-  outline-color: rgb(18 105 184 / 0.45);
+  outline-color: rgb(29 78 216 / 0.45);
 }
 
 .cell.selected {
-  outline-color: var(--edit);
-  background: rgb(18 105 184 / 0.07);
+  outline-color: var(--blue);
+  background: var(--blue-wash);
+}
+
+.cell.problem:not(.selected) {
+  outline: 2px dashed var(--bad);
 }
 
 .cell :deep(.vgl-item__resizer) {
@@ -563,39 +690,46 @@ const modKey = isMac ? '⌘' : 'Ctrl'
 .tag,
 .flag {
   position: absolute;
-  font-size: 11px;
-  font-weight: 500;
+  left: 8px;
+  max-width: calc(100% - 16px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 700;
   line-height: 16px;
   padding: 0 6px;
-  white-space: nowrap;
+  border-radius: 4px;
   pointer-events: none;
 }
 
+/* Editor marks are blue: they never reach the panel. */
 .tag {
-  top: 3px;
-  right: 3px;
-  border-radius: 0 2px 0 3px;
-  background: var(--edit);
-  color: #fff;
+  top: 8px;
+  border: 1.5px solid var(--blue);
+  background: #fff;
+  color: var(--blue);
   opacity: 0;
 }
 
 .cell:hover .tag,
-.cell.selected .tag {
+.cell.selected .tag,
+.frame.dragging .tag {
   opacity: 1;
 }
 
+.cell.selected .tag {
+  background: var(--blue);
+  color: #fff;
+}
+
 .flag {
-  left: 50%;
   bottom: 8px;
-  transform: translateX(-50%);
-  max-width: calc(100% - 12px);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  border-radius: 8px;
-  background: #fbeccd;
-  color: #6b3f00;
-  border: 1px solid #c98a1b;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--bad);
+  color: #fff;
 }
 
 .blank {
@@ -606,101 +740,175 @@ const modKey = isMac ? '⌘' : 'Ctrl'
   align-items: center;
   justify-content: center;
   gap: 4px;
-  color: #14191c;
+  text-align: center;
+  color: #111;
   pointer-events: none;
 }
 
-.blank .muted {
-  color: #55616a;
+.blank p {
+  padding: 0 6px;
+  background: #fff;
 }
 
-.note {
+.blank .small {
+  color: #55554f;
+}
+
+.blank-title {
+  font-size: var(--t17);
+  font-weight: 700;
+}
+
+.toast {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 12px;
   margin-top: 14px;
+  padding: 8px 8px 8px 14px;
+  border-radius: var(--radius);
+  background: var(--ink);
+  color: var(--on-ink);
+  font-weight: 500;
+}
+
+.toast span {
+  flex: 1;
+}
+
+.toast button {
+  border-color: var(--sheet);
 }
 
 .hint {
-  margin-top: 14px;
-  line-height: 1.9;
+  margin-top: 12px;
+  line-height: 2;
 }
 
 .inspector {
+  flex: 1 1 340px;
+  min-width: 0;
+  max-width: 460px;
   display: flex;
   flex-direction: column;
   gap: 16px;
 }
 
-.pane {
-  padding: 16px;
-  border: 1px solid var(--rule);
-  border-radius: 6px;
-  background: var(--sheet);
-}
-
-.pane > h3 {
-  margin-bottom: 8px;
-}
-
 .pane-head {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
-  margin-bottom: 12px;
+  gap: 12px;
+  padding: 16px 16px 14px;
+  border-bottom: 2px dotted var(--ink);
 }
 
-.pane .notice {
-  margin-bottom: 14px;
+.who {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.kind-icon {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  flex: none;
+  border: 2px solid var(--ink);
+  border-radius: 7px;
+}
+
+.kind-icon.solid {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius);
+  background: var(--ink);
+  color: var(--on-ink);
+}
+
+.pane-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 16px;
+}
+
+.pane-body .notice {
+  display: flex;
+  gap: 10px;
+}
+
+.pane-body .notice svg {
+  flex: none;
+  margin-top: 1px;
 }
 
 .pane-actions {
   display: flex;
-  justify-content: space-between;
-  margin-top: 18px;
-  padding-top: 14px;
-  border-top: 1px solid var(--rule-soft);
+  gap: 8px;
+  padding: 14px 16px 16px;
+  border-top: 2px dotted var(--ink);
+}
+
+.palette-pane {
+  padding: 16px 8px 8px;
+}
+
+.palette-pane h3 {
+  font-size: var(--t17);
+  padding: 0 8px 8px;
 }
 
 .palette {
   list-style: none;
-  margin: 0 -8px -8px;
   padding: 0;
 }
 
 .palette button {
   width: 100%;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 0;
-  padding: 7px 8px;
+  min-height: 0;
+  justify-content: flex-start;
+  gap: 12px;
+  padding: 10px 8px;
   border-color: transparent;
-  background: none;
+  background: transparent;
   text-align: left;
+  white-space: normal;
+  line-height: 1.35;
 }
 
-.palette button:hover {
-  background: var(--blue-wash);
-  border-color: transparent;
+.palette button:hover:not(:disabled) {
+  border-color: var(--ink);
+  background: var(--sheet);
+  color: var(--ink);
 }
 
-.k-label::before {
-  content: '+ ';
-  color: var(--blue);
+.k-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.k-label {
   font-weight: 700;
 }
 
 .k-desc {
+  font-size: var(--t12);
   font-weight: 400;
-  padding-left: 15px;
+  color: var(--muted);
+}
+
+.k-size {
+  font-family: 'Go Mono', ui-monospace, monospace;
+  font-size: var(--t12);
+  font-weight: 400;
+  color: var(--muted);
 }
 
 @media (max-width: 1080px) {
-  .editor {
-    grid-template-columns: 1fr;
-  }
-
   .hint {
     display: none;
   }

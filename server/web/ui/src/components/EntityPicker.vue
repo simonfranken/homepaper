@@ -4,6 +4,9 @@
 // and matches the search against both name and ID.
 import { computed, nextTick, ref, watch } from 'vue'
 import type { Entity } from '../api'
+import Icon from './Icon.vue'
+
+defineOptions({ inheritAttrs: false })
 
 const props = defineProps<{
   modelValue: string
@@ -14,6 +17,8 @@ const props = defineProps<{
   // "add" mode: the field stays empty and each pick is emitted once.
   add?: boolean
   exclude?: string[]
+  domains?: string[] // the field's domains, offered as a filter chip
+  id?: string
 }>()
 const emit = defineEmits<{ 'update:modelValue': [id: string] }>()
 
@@ -32,10 +37,15 @@ function stateText(e: Entity) {
   return e.unit ? `${e.state} ${e.unit}` : e.state
 }
 
+// The field's domains are the default; "all domains" widens the search,
+// e.g. for a template sensor of an unusual domain.
+const allDomains = ref(false)
+const pool = computed(() => (allDomains.value ? props.all : props.entities))
+
 const matches = computed(() => {
   const words = query.value.toLowerCase().split(/\s+/).filter(Boolean)
   const skip = new Set(props.exclude ?? [])
-  return props.entities.filter((e) => {
+  return pool.value.filter((e) => {
     if (skip.has(e.id)) return false
     const hay = `${e.name} ${e.id}`.toLowerCase()
     return words.every((w) => hay.includes(w))
@@ -47,11 +57,11 @@ const shown = computed(() => matches.value.slice(0, MAX_RESULTS))
 // for a device that is switched off.
 const custom = computed(() => {
   const q = query.value.trim()
-  return /^[a-z_]+\.[a-z0-9_]+$/.test(q) && !props.entities.some((e) => e.id === q) ? q : ''
+  return /^[a-z_]+\.[a-z0-9_]+$/.test(q) && !pool.value.some((e) => e.id === q) ? q : ''
 })
 const optionCount = computed(() => shown.value.length + (custom.value ? 1 : 0))
 
-watch(query, () => (active.value = 0))
+watch([query, allDomains], () => (active.value = 0))
 
 async function openList() {
   open.value = true
@@ -97,6 +107,7 @@ function onFocusOut(e: FocusEvent) {
   <div ref="root" class="picker" @focusout="onFocusOut" @keydown.esc.stop="close(true)">
     <div class="closed">
       <button
+        :id="id"
         type="button"
         class="field"
         :class="{ empty: !modelValue || add, missing: modelValue && !current && !add }"
@@ -104,17 +115,21 @@ function onFocusOut(e: FocusEvent) {
         :aria-expanded="open"
         @click="open ? close() : openList()"
       >
-        <template v-if="add || !modelValue">
-          <span class="name muted">{{ placeholder ?? 'Choose an entity' }}</span>
-        </template>
-        <template v-else-if="current">
-          <span class="name">{{ current.name }}</span>
-          <span class="state">{{ stateText(current) }}</span>
-        </template>
-        <template v-else>
-          <span class="name mono">{{ modelValue }}</span>
-          <span class="state">not found</span>
-        </template>
+        <span class="who">
+          <template v-if="add || !modelValue">
+            <span class="name muted">{{ placeholder ?? 'Choose an entity…' }}</span>
+          </template>
+          <template v-else-if="current">
+            <span class="name">{{ current.name }}</span>
+            <span class="id mono">{{ modelValue }}</span>
+          </template>
+          <template v-else>
+            <span class="name">{{ modelValue }}</span>
+            <span class="id mono">not in Home Assistant right now</span>
+          </template>
+        </span>
+        <span v-if="current && !add" class="state">{{ stateText(current) }}</span>
+        <Icon :name="add ? 'plus' : 'chevron'" :size="16" :stroke="3" />
       </button>
       <button
         v-if="clearable && modelValue && !add"
@@ -124,24 +139,34 @@ function onFocusOut(e: FocusEvent) {
         title="Clear"
         @click="emit('update:modelValue', '')"
       >
-        ×
+        <Icon name="close" :size="14" :stroke="3" />
       </button>
     </div>
-    <p v-if="modelValue && !add && current" class="id mono muted">{{ modelValue }}</p>
 
     <div v-if="open" class="pop">
-      <input
-        ref="search"
-        v-model="query"
-        type="search"
-        placeholder="Search by name or ID"
-        aria-label="Search entities"
-        autocomplete="off"
-        spellcheck="false"
-        @keydown.down.prevent="move(1)"
-        @keydown.up.prevent="move(-1)"
-        @keydown.enter.prevent="pickActive"
-      />
+      <div class="search">
+        <Icon name="search" :size="16" :stroke="3" />
+        <input
+          ref="search"
+          v-model="query"
+          type="search"
+          placeholder="Search by name or ID"
+          aria-label="Search entities"
+          autocomplete="off"
+          spellcheck="false"
+          @keydown.down.prevent="move(1)"
+          @keydown.up.prevent="move(-1)"
+          @keydown.enter.prevent="pickActive"
+        />
+      </div>
+      <div v-if="domains?.length" class="chips" role="group" aria-label="Domain">
+        <button type="button" class="chip" :aria-pressed="!allDomains" :class="{ on: !allDomains }" @mousedown.prevent @click="allDomains = false">
+          {{ domains.join(', ') }}
+        </button>
+        <button type="button" class="chip" :aria-pressed="allDomains" :class="{ on: allDomains }" @mousedown.prevent @click="allDomains = true">
+          all domains
+        </button>
+      </div>
       <ul ref="list" role="listbox">
         <li
           v-for="(e, i) in shown"
@@ -153,11 +178,11 @@ function onFocusOut(e: FocusEvent) {
           @click="pick(e.id)"
           @mousemove="active = i"
         >
-          <span class="row">
+          <span class="text">
             <span class="name">{{ e.name }}</span>
-            <span class="state">{{ stateText(e) }}</span>
+            <span class="mono">{{ e.id }}</span>
           </span>
-          <span class="mono muted">{{ e.id }}</span>
+          <span class="state">{{ stateText(e) }}</span>
         </li>
         <li
           v-if="custom"
@@ -167,15 +192,18 @@ function onFocusOut(e: FocusEvent) {
           @mousedown.prevent
           @click="pick(custom)"
         >
-          <span class="row"><span class="name">Use this ID anyway</span></span>
-          <span class="mono muted">{{ custom }}</span>
+          <span class="text">
+            <span class="name">Use this ID anyway</span>
+            <span class="mono">{{ custom }}</span>
+          </span>
         </li>
       </ul>
-      <p v-if="!optionCount" class="none muted small">
-        {{ entities.length ? 'No entity matches that search.' : 'Home Assistant has no entities of this type.' }}
+      <p v-if="!optionCount" class="foot">
+        {{ pool.length ? 'No entity matches that search.' : 'Home Assistant has no entities of this type.' }}
       </p>
-      <p v-else-if="matches.length > MAX_RESULTS" class="none muted small">
-        Showing {{ MAX_RESULTS }} of {{ matches.length }}. Type to narrow it down.
+      <p v-else class="foot">
+        <template v-if="matches.length > MAX_RESULTS">Showing {{ MAX_RESULTS }} of {{ matches.length }}. Type to narrow it down.</template>
+        <template v-else>{{ matches.length }} of {{ all.length }} entities · states update live</template>
       </p>
     </div>
   </div>
@@ -188,16 +216,26 @@ function onFocusOut(e: FocusEvent) {
 
 .closed {
   display: flex;
-  gap: 2px;
+  gap: 4px;
 }
 
 .field {
   flex: 1;
   min-width: 0;
-  justify-content: space-between;
-  gap: 10px;
+  min-height: 48px;
+  justify-content: flex-start;
+  gap: 12px;
+  padding: 6px 12px;
   font-weight: 400;
   text-align: left;
+  white-space: normal;
+  line-height: 1.3;
+}
+
+.field:hover:not(:disabled) {
+  background: var(--sheet);
+  color: var(--ink);
+  box-shadow: inset 0 0 0 1px var(--ink);
 }
 
 .field.empty {
@@ -205,88 +243,162 @@ function onFocusOut(e: FocusEvent) {
 }
 
 .field.missing {
-  border-color: var(--warn);
+  border-color: var(--bad);
 }
 
-.field.missing .state {
-  color: var(--warn);
+.field.missing .id {
+  color: var(--bad);
+}
+
+.who {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
 }
 
 .name {
+  font-weight: 500;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.field .name.muted {
+  font-weight: 400;
+}
+
+.id {
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  word-break: normal;
 }
 
 .state {
   flex: none;
-  max-width: 45%;
+  max-width: 40%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--muted);
-  font-size: var(--text-s);
+  font-size: var(--t17);
+  font-weight: 700;
 }
 
 .clear {
-  width: 30px;
+  width: 40px;
   padding: 0;
-  font-size: 18px;
-}
-
-.id {
-  margin-top: 3px;
-  font-size: 12px;
 }
 
 .pop {
   position: absolute;
   z-index: 20;
-  top: 38px;
+  top: calc(100% + 6px);
   left: 0;
   right: 0;
-  padding: 6px;
-  border: 1px solid var(--blue);
+  border: 2px solid var(--ink);
   border-radius: var(--radius);
   background: var(--sheet);
-  box-shadow: 0 8px 24px rgb(10 30 50 / 0.18);
+  outline: 3px solid var(--blue);
+  outline-offset: 2px;
+  overflow: hidden;
+}
+
+.search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  border-bottom: 2px solid var(--ink);
+}
+
+.search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+}
+
+.search input:focus-visible {
+  outline: none;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px 10px;
+  border-bottom: 2px dotted var(--ink);
+}
+
+.chip {
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: 14px;
+  font-size: var(--t12);
+}
+
+.chip.on {
+  background: var(--ink);
+  color: var(--on-ink);
 }
 
 ul {
   list-style: none;
-  margin: 6px 0 0;
-  padding: 0;
-  max-height: 264px;
+  margin: 0;
+  padding: 4px;
+  max-height: 280px;
   overflow-y: auto;
 }
 
 li {
   display: flex;
-  flex-direction: column;
-  padding: 5px 8px;
-  border-radius: 3px;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 6px;
   cursor: pointer;
 }
 
-li.active {
-  background: var(--blue-wash);
-}
-
-li.chosen .name {
-  font-weight: 700;
+li .text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 li .mono {
-  font-size: 12px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  word-break: normal;
 }
 
-.row {
-  display: flex;
-  justify-content: space-between;
-  gap: 10px;
+li .state {
+  font-size: var(--t14);
 }
 
-.none {
-  padding: 6px 8px 2px;
+li.active {
+  background: var(--paper);
+}
+
+li.chosen {
+  background: var(--ink);
+  color: var(--on-ink);
+}
+
+li.chosen .mono {
+  color: #d6d5ce;
+}
+
+.foot {
+  padding: 8px 12px;
+  border-top: 2px dotted var(--ink);
+  font-size: var(--t12);
+  color: var(--muted);
 }
 </style>

@@ -3,6 +3,7 @@
 // it saves and never sends the token back, so the token field is write-only.
 import { computed, onMounted, ref } from 'vue'
 import { api, type HaSettings } from '../api'
+import Icon from './Icon.vue'
 
 const emit = defineEmits<{ close: []; changed: [] }>()
 
@@ -28,8 +29,8 @@ const status = computed(() => {
   const st = settings.value
   if (!st) return undefined
   if (st.origin === 'none')
-    return { cls: '', text: 'Not connected. homepaper shows demo entities until you connect your Home Assistant.' }
-  if (st.status.connected) return { cls: 'ok', text: `Connected. ${st.status.entities} entities available.` }
+    return { cls: 'demo', text: 'Showing demo data. Nothing is connected yet.' }
+  if (st.status.connected) return { cls: 'ok', text: `Connected · ${st.status.entities} entities` }
   return { cls: 'bad', text: st.status.error ? `Not connected: ${st.status.error}` : 'Connecting…' }
 })
 
@@ -40,7 +41,7 @@ async function save() {
     settings.value = await api.saveHaSettings(url.value.trim(), token.value.trim())
     url.value = settings.value.url
     token.value = ''
-    done.value = 'Connected and saved.'
+    done.value = 'Connected. Displays switch over now; no restart needed.'
     emit('changed')
   } catch (e) {
     error.value = (e as Error).message
@@ -68,9 +69,12 @@ async function remove() {
 <template>
   <dialog ref="dialog" aria-labelledby="ha-title" @close="emit('close')">
     <h2 id="ha-title">Home Assistant</h2>
-    <p v-if="status" class="status"><span class="dot" :class="status.cls"></span> {{ status.text }}</p>
-    <p v-if="settings?.origin === 'env'" class="muted small">
-      This connection comes from HA_URL and HA_TOKEN in the server's environment. Saving here takes over from it.
+    <p v-if="status" class="status" :class="{ bad: status.cls === 'bad' }">
+      <span class="dot" :class="status.cls"></span> {{ status.text }}
+    </p>
+    <p v-if="settings?.origin === 'env'" class="muted small env">
+      This connection comes from <span class="mono ink">HA_URL</span> and <span class="mono ink">HA_TOKEN</span> in the
+      server's environment. Saving here takes over from it.
     </p>
 
     <form @submit.prevent="save">
@@ -79,6 +83,7 @@ async function remove() {
         <input
           id="ha-url"
           v-model="url"
+          class="mono-input"
           placeholder="http://homeassistant.local:8123"
           autocomplete="off"
           spellcheck="false"
@@ -101,11 +106,12 @@ async function remove() {
         </p>
       </div>
 
-      <p v-if="error" class="error" role="alert">{{ error }}</p>
-      <p v-if="done" class="done small" role="status">{{ done }}</p>
+      <p v-if="error" class="error box" role="alert"><Icon name="warn" :size="18" /> <span>{{ error }}</span></p>
+      <p v-if="done" class="ok-box" role="status"><Icon name="check" :size="18" :stroke="3" /> <span>{{ done }}</span></p>
 
       <div class="actions">
         <button type="submit" class="primary" :disabled="!!busy">
+          <span v-if="busy === 'save'" class="spin"></span>
           {{ busy === 'save' ? 'Testing the connection…' : 'Test and save' }}
         </button>
         <button type="button" :disabled="!!busy" @click="dialog?.close()">Close</button>
@@ -118,37 +124,56 @@ async function remove() {
 </template>
 
 <style scoped>
-.status {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  margin: 10px 0 4px;
+h2 {
+  font-size: var(--t25);
 }
 
-.status .dot {
-  transform: translateY(-1px);
+.status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.status.bad {
+  color: var(--bad);
+  font-weight: 500;
+}
+
+.env {
+  margin-top: 6px;
+}
+
+.ink {
+  color: var(--ink);
+}
+
+.mono-input {
+  font-family: 'Go Mono', ui-monospace, monospace;
 }
 
 form {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 16px;
   margin-top: 18px;
 }
 
 .help {
-  margin-top: 5px;
+  margin-top: 6px;
 }
 
-.done {
-  color: var(--ok);
+.error.box svg,
+.ok-box svg {
+  flex: none;
+  margin-top: 1px;
 }
 
 .actions {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 8px;
-  margin-top: 4px;
 }
 
 .remove {

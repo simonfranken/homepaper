@@ -2,13 +2,15 @@
 
 Each milestone ends with something you can run and see. The order is chosen so the riskiest parts (panel, board, server → device path) are proven first.
 
-## Status (2026-11-11)
+## Status (2026-11-16)
 
 Built and tested **without a panel**:
 - **Server:** HA client (tested against a real HA on 2026-11-10: initial states, live `state_changed` events, entity picker in the editor, partial frames to `fakedevice`), demo mode, renderer, region diff, device hub, REST API, Docker image.
 - **Editor UI:** tested in headless Chromium and in Chrome against a real HA. Reworked on 2026-11-11 (tested in Chrome with demo data and `fakedevice`): displays as tabs with a Layout/Display switch, a searchable entity picker, undo/redo, keyboard moves and resizing, flags for widgets without an entity, a guided connect flow, and the HA settings dialog. The HA dialog was tested against a fake HA in `internal/api` tests, **not yet against a real HA**.
 - **Firmware:** setup portal, Wi-Fi, WebSocket, framebuffer, acks, `NullPanel` with ASCII-art output. It compiles, but **hasn't run on the ESP32-S3 yet**. The setup portal's prefill link (2026-11-11) is untested on hardware too.
 - **Protocol:** verified end to end with `server/cmd/fakedevice`.
+
+- **Design (2026-11-16):** the panel redesign ([D-015](decisions.md#d-015)) is rendered, with daily forecasts from Home Assistant. The web UI follows the shared design language ([D-014](decisions.md#d-014)). Tested with demo data, `fakedevice` and headless Chromium.
 
 Next: flash the S3 and check the connection and setup on real hardware, then order the panel ([P-008](decisions.md#p-008)) and write the panel driver (the rest of M0, then M1).
 
@@ -41,8 +43,7 @@ Next: flash the S3 and check the connection and setup on real hardware, then ord
 
 ## M4: polish and frame build
 
-- The v1 widget catalogue complete. Fonts and icons tuned for 1 bit: implement the panel redesign ([D-015](decisions.md#d-015)), including `weather.get_forecasts` for the forecast strip.
-- Restyle the web UI to the shared design language ([D-014](decisions.md#d-014)).
+- The v1 widget catalogue complete. Fonts and icons tuned for 1 bit: the panel redesign ([D-015](decisions.md#d-015)) and the web UI restyle ([D-014](decisions.md#d-014)) are done; tune both on the real panel.
 - Docker image and setup docs.
 - The frame build, see [hardware.md](hardware.md#frame-build).
 - **Done when** it hangs on the wall and runs unattended.

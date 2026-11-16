@@ -193,3 +193,13 @@ export function setupLink(serverUrl: string, d: Device): string {
 export function hasConnected(d: Device): boolean {
   return d.status.connected || (!!d.last_seen && !d.last_seen.startsWith('0001'))
 }
+
+// "2 min ago", or a date for anything older than a day. Empty for no time.
+export function ago(iso?: string): string {
+  if (!iso || iso.startsWith('0001')) return ''
+  const sec = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 1000))
+  if (sec < 60) return 'just now'
+  if (sec < 3600) return `${Math.round(sec / 60)} min ago`
+  if (sec < 86400) return `${Math.round(sec / 3600)} h ago`
+  return new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
+}

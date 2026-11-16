@@ -5,6 +5,7 @@
 import { ref } from 'vue'
 import type { Entity, Field, WidgetKind } from '../api'
 import EntityPicker from './EntityPicker.vue'
+import Icon from './Icon.vue'
 
 const props = defineProps<{ kind: WidgetKind; options: Record<string, unknown>; entities: Entity[] }>()
 const emit = defineEmits<{ update: [options: Record<string, unknown>, key: string] }>()
@@ -52,9 +53,42 @@ function removeFrom(key: string, id: string) {
   )
 }
 function moveUp(key: string, i: number) {
+  move(key, i, i - 1)
+}
+function move(key: string, from: number, to: number) {
   const ids = list(key)
-  ;[ids[i - 1], ids[i]] = [ids[i], ids[i - 1]]
+  if (from === to || to < 0 || to >= ids.length) return
+  const [id] = ids.splice(from, 1)
+  ids.splice(to, 0, id)
   set(key, ids.join(', '))
+}
+
+// Drag to reorder. The order is the order on the panel.
+const dragFrom = ref<{ key: string; i: number }>()
+function onDrop(key: string, i: number) {
+  if (dragFrom.value?.key === key) move(key, dragFrom.value.i, i)
+  dragFrom.value = undefined
+}
+
+// Numbers get a stepper; empty means "as reported".
+function step(f: Field, by: number) {
+  const cur = values.value[f.key]
+  const n = typeof cur === 'number' ? cur : by > 0 ? -1 : 0
+  const next = n + by
+  set(f.key, next < 0 ? undefined : next)
+}
+
+// Short choice lists read better as radio cards than as a dropdown.
+const asCards = (f: Field) => (f.choices?.length ?? 0) <= 4
+
+// "Date (Monday, 16 November)" → name and example, shown side by side.
+function splitChoice(label: string) {
+  const m = label.match(/^(.*?)\s*\((.*)\)$/)
+  return m ? { name: m[1], example: m[2] } : { name: label, example: '' }
+}
+
+function selected(f: Field) {
+  return str(f.key) || String(f.default ?? '')
 }
 
 function entityName(id: string) {
@@ -74,76 +108,120 @@ function entityName(id: string) {
         {{ f.label }}
       </label>
 
+      <fieldset v-else-if="f.type === 'select' && asCards(f)" class="choices">
+        <legend class="lbl">
+          <span>{{ f.label }}</span>
+        </legend>
+        <label
+          v-for="c in f.choices"
+          :key="c.value"
+          class="choice"
+          :class="{ on: selected(f) === c.value }"
+        >
+          <input
+            type="radio"
+            :name="`f-${f.key}`"
+            :value="c.value"
+            :checked="selected(f) === c.value"
+            @change="set(f.key, c.value)"
+          />
+          <span class="c-name">{{ splitChoice(c.label).name }}</span>
+          <span v-if="splitChoice(c.label).example" class="c-example">{{ splitChoice(c.label).example }}</span>
+        </label>
+        <p v-if="f.help" class="help">{{ f.help }}</p>
+      </fieldset>
+
       <template v-else>
-        <label :for="`f-${f.key}`">{{ f.label }}</label>
+        <label :for="`f-${f.key}`" class="lbl">
+          <span>{{ f.label }}</span>
+          <span v-if="f.required" class="req">Required</span>
+        </label>
 
         <EntityPicker
           v-if="f.type === 'entity'"
+          :id="`f-${f.key}`"
           :model-value="str(f.key)"
           :entities="candidates(f)"
           :all="entities"
+          :domains="f.domains"
           :clearable="!f.required"
-          :placeholder="f.required ? 'Choose an entity' : 'None'"
+          :placeholder="'Choose an entity…'"
           @update:model-value="set(f.key, $event)"
         />
 
         <template v-else-if="f.type === 'entities'">
           <ul v-if="list(f.key).length" class="chosen">
-            <li v-for="(id, i) in list(f.key)" :key="id" :class="{ missing: !entityName(id) }">
-              <span class="name">{{ entityName(id) ?? id }}</span>
-              <span v-if="!entityName(id)" class="small">not found</span>
+            <li
+              v-for="(id, i) in list(f.key)"
+              :key="id"
+              :class="{ missing: !entityName(id), over: dragFrom && dragFrom.key === f.key && dragFrom.i !== i }"
+              draggable="true"
+              @dragstart="dragFrom = { key: f.key, i }"
+              @dragend="dragFrom = undefined"
+              @dragover.prevent
+              @drop.prevent="onDrop(f.key, i)"
+            >
+              <span class="grip" title="Drag to reorder"><Icon name="grip" :size="16" :stroke="3.5" /></span>
+              <span class="name">
+                <span class="n">{{ entityName(id) ?? id }}</span>
+                <span class="id mono">{{ entityName(id) ? id : 'not found' }}</span>
+              </span>
               <button
                 v-if="i > 0"
                 type="button"
-                class="quiet small"
+                class="quiet small icon"
                 :aria-label="`Move ${entityName(id) ?? id} up`"
                 title="Move up"
                 @click="moveUp(f.key, i)"
               >
-                ↑
+                <Icon name="up" :size="14" :stroke="3" />
               </button>
               <button
                 type="button"
-                class="quiet small"
+                class="quiet small icon"
                 :aria-label="`Remove ${entityName(id) ?? id}`"
                 title="Remove"
                 @click="removeFrom(f.key, id)"
               >
-                ×
+                <Icon name="close" :size="14" :stroke="3" />
               </button>
             </li>
           </ul>
           <EntityPicker
+            :id="`f-${f.key}`"
             model-value=""
             add
             :entities="candidates(f)"
             :all="entities"
+            :domains="f.domains"
             :exclude="list(f.key)"
-            :placeholder="list(f.key).length ? 'Add another' : 'Choose an entity'"
+            :placeholder="list(f.key).length ? 'Add another' : 'Choose an entity…'"
             @update:model-value="addTo(f.key, $event)"
           />
+          <p class="help">The display lists them in this order. Drag to reorder.</p>
         </template>
 
         <select
           v-else-if="f.type === 'select'"
           :id="`f-${f.key}`"
-          :value="str(f.key) || String(f.default ?? '')"
+          :value="selected(f)"
           @change="set(f.key, ($event.target as HTMLSelectElement).value)"
         >
           <option v-for="c in f.choices" :key="c.value" :value="c.value">{{ c.label }}</option>
         </select>
 
-        <input
-          v-else-if="f.type === 'number'"
-          :id="`f-${f.key}`"
-          type="number"
-          step="1"
-          min="0"
-          inputmode="numeric"
-          :placeholder="f.placeholder"
-          :value="Number(values[f.key] ?? -1) < 0 ? '' : str(f.key)"
-          @input="setNumber(f.key, ($event.target as HTMLInputElement).value)"
-        />
+        <div v-else-if="f.type === 'number'" class="stepper">
+          <button type="button" class="quiet" :aria-label="`Less: ${f.label}`" @click="step(f, -1)">−</button>
+          <input
+            :id="`f-${f.key}`"
+            type="text"
+            inputmode="numeric"
+            :placeholder="f.placeholder"
+            :value="Number(values[f.key] ?? -1) < 0 ? '' : str(f.key)"
+            @input="setNumber(f.key, ($event.target as HTMLInputElement).value)"
+          />
+          <button type="button" class="quiet" :aria-label="`More: ${f.label}`" @click="step(f, 1)">+</button>
+        </div>
 
         <input
           v-else
@@ -154,7 +232,7 @@ function entityName(id: string) {
           @input="set(f.key, ($event.target as HTMLInputElement).value)"
         />
 
-        <p v-if="f.help" class="help muted small">{{ f.help }}</p>
+        <p v-if="f.help" class="help">{{ f.help }}</p>
       </template>
     </div>
   </form>
@@ -164,57 +242,183 @@ function entityName(id: string) {
 .form {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 18px;
+}
+
+.lbl {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  width: 100%;
+  margin-bottom: 6px;
+  padding: 0;
+  font-size: var(--t14);
+  font-weight: 700;
+}
+
+.req {
+  font-size: var(--t12);
+  font-weight: 400;
+  color: var(--muted);
 }
 
 .help {
-  margin-top: 4px;
+  margin-top: 6px;
+  font-size: var(--t12);
+  color: var(--muted);
 }
 
 .check {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
+  min-height: 32px;
   margin: 0;
-  font-size: var(--text-m);
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.choices {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.choice {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  padding: 10px 12px;
+  border: 2px solid var(--ink);
+  border-radius: var(--radius);
   font-weight: 400;
   cursor: pointer;
 }
 
+.choice.on {
+  background: var(--ink);
+  color: var(--on-ink);
+}
+
+.choice.on input {
+  accent-color: var(--on-ink);
+}
+
+.choice:focus-within {
+  outline: 3px solid var(--blue);
+  outline-offset: 2px;
+}
+
+.c-name {
+  flex: 1;
+}
+
+.c-example {
+  font-family: 'Go Mono', ui-monospace, monospace;
+  font-size: var(--t12);
+  color: var(--muted);
+}
+
+.choice.on .c-example {
+  color: #d6d5ce;
+}
+
 .chosen {
   list-style: none;
-  margin: 0 0 6px;
+  margin: 0 0 8px;
   padding: 0;
-  border: 1px solid var(--rule);
+  border: 2px solid var(--ink);
   border-radius: var(--radius);
+  background: var(--sheet);
 }
 
 .chosen li {
   display: flex;
   align-items: center;
-  gap: 2px;
-  padding: 1px 2px 1px 9px;
+  gap: 8px;
+  padding: 6px 4px 6px 6px;
 }
 
 .chosen li + li {
-  border-top: 1px solid var(--rule-soft);
+  border-top: 2px dotted var(--ink);
+}
+
+.chosen li.over {
+  box-shadow: inset 0 3px 0 var(--blue);
+}
+
+.grip {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  color: var(--muted);
+  cursor: grab;
 }
 
 .chosen .name {
   flex: 1;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.chosen .n {
+  font-weight: 500;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.chosen .missing {
-  color: var(--warn);
+.chosen .id {
+  color: var(--muted);
 }
 
-.chosen button {
-  width: 28px;
+.chosen .missing .n,
+.chosen .missing .id {
+  color: var(--bad);
+}
+
+.icon {
+  width: 32px;
   padding: 0;
-  font-size: 16px;
+}
+
+.stepper {
+  display: flex;
+  align-items: stretch;
+  max-width: 200px;
+  border: 2px solid var(--ink);
+  border-radius: var(--radius);
+  background: var(--sheet);
+  overflow: hidden;
+}
+
+.stepper button {
+  min-width: 40px;
+  border: 0;
+  border-radius: 0;
+  font-size: var(--t17);
+}
+
+.stepper button:first-child {
+  border-right: 2px solid var(--ink);
+}
+
+.stepper button:last-child {
+  border-left: 2px solid var(--ink);
+}
+
+.stepper input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  border-radius: 0;
+  text-align: center;
+  font-family: 'Go Mono', ui-monospace, monospace;
 }
 </style>

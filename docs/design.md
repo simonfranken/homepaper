@@ -2,7 +2,7 @@
 
 homepaper has two surfaces: the **panel** (800 × 480, 1-bit) and the **web UI** where the user lays it out. Both follow one design language ([D-014](decisions.md#d-014)). The panel redesign is [D-015](decisions.md#d-015).
 
-**Status (2026-11-16):** both designs are agreed. The panel design is implemented, and the renderer reproduces `design/hero-*.png` pixel for pixel (`TestGolden`). The web UI restyle is in progress.
+**Status (2026-11-16):** both designs are agreed. Both are implemented. The renderer reproduces `design/hero-*.png` pixel for pixel (`TestGolden`), and the web UI follows the tokens below (`server/web/ui/src/style.css`).
 
 ## Shared language (D-014)
 
@@ -42,6 +42,8 @@ The structure stays as built (header with display tabs, Layout/Display switch, e
   - Multi-entity fields are an ordered list with drag handles.
   - Short select lists are radio cards, long ones a dropdown. Numbers get a −/+ stepper.
   - Required fields are marked "Required".
+- **Dividers:** a Rules/Frames switch in the editor toolbar sets the layout's dividers ([D-015](decisions.md#d-015)). The design canvas had no place for it; the toolbar is the implementation's choice.
+- **Light only:** the old editor followed the system's dark mode. The design is ink on paper and has no dark variant, so the restyled UI is light only.
 - **Display tab:** numbered setup steps, the values to enter by hand (with Copy and Show), a status card with details, and Manage (rename, replace token, delete) with inline confirmation.
 - **Dialogs:** Add display, and Home Assistant (first connection, saved, from environment, token rejected, can't reach).
 

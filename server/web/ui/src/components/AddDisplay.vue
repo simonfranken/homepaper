@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { api, type Device } from '../api'
+import Icon from './Icon.vue'
 
 const props = defineProps<{ existing: string[] }>()
 const emit = defineEmits<{ close: []; created: [d: Device] }>()
@@ -49,11 +50,11 @@ async function create() {
         <label for="add-name">Where does it hang?</label>
         <input id="add-name" v-model="name" placeholder="Living room" maxlength="60" autocomplete="off" required autofocus />
         <p class="muted small help">
-          Its device ID will be <span class="mono">{{ id }}</span
+          Its device ID will be <span class="mono ink">{{ id }}</span
           >.
         </p>
       </div>
-      <p v-if="error" class="error" role="alert">{{ error }}</p>
+      <p v-if="error" class="error box" role="alert"><Icon name="warn" :size="18" /> <span>{{ error }}</span></p>
       <div class="actions">
         <button type="submit" class="primary" :disabled="busy || !name.trim()">Add display</button>
         <button type="button" @click="dialog?.close()">Cancel</button>
@@ -63,15 +64,28 @@ async function create() {
 </template>
 
 <style scoped>
+h2 {
+  font-size: var(--t25);
+}
+
 form {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 16px;
   margin-top: 16px;
 }
 
 .help {
-  margin-top: 5px;
+  margin-top: 6px;
+}
+
+.ink {
+  color: var(--ink);
+}
+
+.error.box svg {
+  flex: none;
+  margin-top: 1px;
 }
 
 .actions {

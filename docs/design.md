@@ -32,7 +32,7 @@ The structure stays as built (header with display tabs, Layout/Display switch, e
 
 - **Header:** display tabs with status dots, "Add display", and the Home Assistant button in three states (demo with "Connect Home Assistant", connected with the entity count, unreachable).
 - **Layout view:**
-  - The preview sits in a black bezel (a picture frame), with the 8 × 6 grid as blue guides.
+  - The preview sits in a black bezel (a picture frame), with the 8 × 6 grid as blue guides while a widget is moved or resized.
   - Widgets get blue kind tags. The selected one has a blue outline and a resize handle.
   - Problems get a dashed red outline and a red flag ("Choose an entity", "Entity not found").
   - The title row shows the status and the time of the last frame.

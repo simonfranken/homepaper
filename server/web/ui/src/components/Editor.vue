@@ -634,12 +634,12 @@ const modKey = isMac ? '⌘' : 'Ctrl'
   image-rendering: pixelated;
 }
 
-/* The snap grid, faint at rest and clear while a widget moves. */
+/* The snap grid, shown only while a widget is moved or resized. */
 .guides {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  opacity: 0.5;
+  opacity: 0;
   transition: opacity 0.12s;
   background-image:
     linear-gradient(to right, rgb(29 78 216 / 0.3) 1px, transparent 1px),

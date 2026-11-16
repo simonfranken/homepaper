@@ -52,7 +52,7 @@ espflash flash --monitor target/xtensa-esp32s3-espidf/release/homepaper-fw   # n
 - The BDF files in `server/internal/render/fonts/lucida/` must stay byte-for-byte unmodified (their license). Don't subset, convert or patch them; handle missing glyphs in code (`bitmapFace` falls back to the Go font).
 - In `server/`, `coder/websocket` has a 32 KB default read limit. The HA client raises it, because `get_states` responses are large.
 - When killing the dev server, use `pkill -x homepaper`, not `pkill -f bin/homepaper`, which also matches your own shell.
-- HA's WebSocket API rejects message IDs that don't increase within a connection ("Identifier values have to increase"). The HA client subscribes with id 1, then sends `get_states` with id 2. Keep that order when adding requests.
+- HA's WebSocket API rejects message IDs that don't increase within a connection ("Identifier values have to increase"). In `ha.Client.session` every request takes its ID from the `send` counter, and only that goroutine writes. Send new requests through it. `internal/ha/client_test.go` fails on a reused ID.
 
 ## Conventions
 

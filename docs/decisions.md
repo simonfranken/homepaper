@@ -117,7 +117,12 @@ One functional accent, editor blue, marks only what never reaches the panel. Det
 - icons that draw the state;
 - per-kind rules for what drops as a widget shrinks.
 
-Built on the 8 × 6 grid, which is still [P-003](#p-003). The 5-day weather strip needs `weather.get_forecasts`. Details and mockups in [design.md](design.md#panel-d-015).
+Confirmed by the project owner on 2026-11-16:
+- the layout-wide divider setting replaces the per-widget frame option;
+- inversion applies to exactly the states listed above;
+- the forecast is built now, via `weather.get_forecasts`, fetched by the HA client after `get_states`, every 30 min, and when a weather entity changes (at most every 10 min).
+
+Built on the 8 × 6 grid, which is still [P-003](#p-003). Details and mockups in [design.md](design.md#panel-d-015).
 
 ## Proposed
 

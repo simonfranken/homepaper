@@ -165,6 +165,11 @@ func (c *Client) Run(ctx context.Context) {
 	}
 }
 
+type haError struct {
+	Code    string `json:"code"`
+	Message string `json:"message"`
+}
+
 type haMsg struct {
 	ID      int             `json:"id,omitempty"`
 	Type    string          `json:"type"`
@@ -176,9 +181,7 @@ type haMsg struct {
 			NewState *Entity `json:"new_state"`
 		} `json:"data"`
 	} `json:"event,omitempty"`
-	Error *struct {
-		Message string `json:"message"`
-	} `json:"error,omitempty"`
+	Error *haError `json:"error,omitempty"`
 }
 
 func (c *Client) session(ctx context.Context) error {
@@ -187,22 +190,82 @@ func (c *Client) session(ctx context.Context) error {
 		return err
 	}
 	defer conn.CloseNow()
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 
-	// HA requires message IDs to increase within a connection. Subscribe
-	// first so no state_changed event between snapshot and subscription is lost.
-	const idSubscribe, idStates = 1, 2
-	if err := wsjson.Write(ctx, conn, map[string]any{"id": idSubscribe, "type": "subscribe_events", "event_type": "state_changed"}); err != nil {
+	// HA rejects message IDs that don't increase within a connection, so
+	// every request takes the next one. Subscribe first so no state_changed
+	// event between snapshot and subscription is lost.
+	lastID := 0
+	send := func(msg func(id int) map[string]any) (int, error) {
+		lastID++
+		return lastID, wsjson.Write(ctx, conn, msg(lastID))
+	}
+	if _, err := send(func(id int) map[string]any {
+		return map[string]any{"id": id, "type": "subscribe_events", "event_type": "state_changed"}
+	}); err != nil {
 		return err
 	}
-	if err := wsjson.Write(ctx, conn, map[string]any{"id": idStates, "type": "get_states"}); err != nil {
+	idStates, err := send(func(id int) map[string]any { return map[string]any{"id": id, "type": "get_states"} })
+	if err != nil {
 		return err
 	}
 	c.Log.Info("connected to home assistant", "url", c.URL)
 
+	// One goroutine reads; this one handles messages and does all writes.
+	msgs := make(chan haMsg)
+	readErr := make(chan error, 1)
+	go func() {
+		for {
+			var m haMsg
+			if err := wsjson.Read(ctx, conn, &m); err != nil {
+				readErr <- err
+				return
+			}
+			select {
+			case msgs <- m:
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+
+	// Daily forecasts of weather entities (weather.get_forecasts).
+	pending := map[int]string{} // request ID → weather entity
+	fetched := map[string]time.Time{}
+	fetch := func(entityID string, force bool) error {
+		if !force && time.Since(fetched[entityID]) < forecastMinGap {
+			return nil
+		}
+		fetched[entityID] = time.Now()
+		id, err := send(func(id int) map[string]any { return forecastRequest(id, entityID) })
+		pending[id] = entityID
+		return err
+	}
+	fetchAll := func() error {
+		for _, e := range c.Store.All() {
+			if isWeather(e.ID) {
+				if err := fetch(e.ID, true); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	}
+	tick := time.NewTicker(forecastEvery)
+	defer tick.Stop()
+
 	for {
 		var m haMsg
-		if err := wsjson.Read(ctx, conn, &m); err != nil {
+		select {
+		case err := <-readErr:
 			return err
+		case <-tick.C:
+			if err := fetchAll(); err != nil {
+				return err
+			}
+			continue
+		case m = <-msgs:
 		}
 		switch {
 		case m.Type == "result" && m.ID == idStates:
@@ -216,11 +279,37 @@ func (c *Client) session(ctx context.Context) error {
 			c.Store.Replace(states)
 			c.Store.setConnected(true)
 			c.Log.Info("loaded entity states", "count", len(states))
+			if err := fetchAll(); err != nil {
+				return err
+			}
+		case m.Type == "result" && pending[m.ID] != "":
+			entityID := pending[m.ID]
+			delete(pending, m.ID)
+			if m.Success != nil && !*m.Success {
+				// Some integrations have no daily forecast. The widget then
+				// draws without its forecast strip.
+				c.Log.Info("no daily forecast", "entity", entityID, "err", m.Error)
+				c.Store.SetForecast(entityID, nil)
+				continue
+			}
+			f, err := parseForecastResult(m.Result, entityID)
+			if err != nil {
+				c.Log.Warn("bad forecast", "entity", entityID, "err", err)
+				continue
+			}
+			c.Store.SetForecast(entityID, f)
 		case m.Type == "result" && m.Success != nil && !*m.Success:
 			return fmt.Errorf("request %d failed: %v", m.ID, m.Error)
 		case m.Type == "event" && m.Event != nil:
 			d := m.Event.Data
 			c.Store.Set(d.EntityID, d.NewState)
+			if isWeather(d.EntityID) && d.NewState != nil {
+				if err := fetch(d.EntityID, false); err != nil {
+					return err
+				}
+			}
 		}
 	}
 }
+
+func (e *haError) String() string { return e.Message }

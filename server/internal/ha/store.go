@@ -56,6 +56,7 @@ func (e Entity) AttrFloat(key string) (float64, bool) {
 type Store struct {
 	mu        sync.RWMutex
 	entities  map[string]Entity
+	forecasts map[string][]Forecast
 	listeners []func(ids []string)
 	connected bool
 	source    string
@@ -63,7 +64,27 @@ type Store struct {
 }
 
 func NewStore(source string) *Store {
-	return &Store{entities: map[string]Entity{}, source: source}
+	return &Store{entities: map[string]Entity{}, forecasts: map[string][]Forecast{}, source: source}
+}
+
+// Forecast returns the daily forecast of a weather entity, if one is known.
+func (s *Store) Forecast(id string) []Forecast {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.forecasts[id]
+}
+
+// SetForecast stores (or, when f is nil, drops) a weather entity's daily
+// forecast and tells listeners the entity changed.
+func (s *Store) SetForecast(id string, f []Forecast) {
+	s.mu.Lock()
+	if f == nil {
+		delete(s.forecasts, id)
+	} else {
+		s.forecasts[id] = f
+	}
+	s.mu.Unlock()
+	s.notify([]string{id})
 }
 
 func (s *Store) Get(id string) (Entity, bool) {
@@ -148,6 +169,7 @@ func (s *Store) setError(msg string) {
 func (s *Store) reset(source string) {
 	s.mu.Lock()
 	s.entities = map[string]Entity{}
+	s.forecasts = map[string][]Forecast{}
 	s.source = source
 	s.connected = false
 	s.lastErr = ""

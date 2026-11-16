@@ -240,10 +240,14 @@ func renderWeather(c *ctx, r rect) {
 	if desc == "" {
 		desc = e.State
 	}
+	descPx := math.Min(bottom.H, 22)
 	if v, ok := e.AttrFloat("humidity"); ok {
-		desc += fmt.Sprintf(" · %.0f %%", v)
+		// Humidity only when it fits; the condition matters more.
+		if full := desc + fmt.Sprintf(" · %.0f %%", v); fits(full, fontRegular, descPx, bottom.W, bottom.H) {
+			desc = full
+		}
 	}
-	c.text(desc, fontRegular, math.Min(bottom.H, 22), bottom, 0, 0.3)
+	c.text(desc, fontRegular, descPx, bottom, 0, 0.3)
 }
 
 func renderLights(c *ctx, r rect) {
@@ -329,7 +333,8 @@ func renderBinary(c *ctx, r rect) {
 		return
 	}
 	txt, active := binaryText(e.Domain(), e.Attr("device_class"), e.State)
-	s := math.Min(r.H, 36)
+	// The icon gives way to the text in narrow widgets.
+	s := math.Round(math.Min(math.Min(r.H, 36), r.W*0.3))
 	iconR, rest := r.splitLeft(s + 6)
 	iconDot(c.dc, iconR.X+s/2, iconR.Y+iconR.H/2, s, active)
 	c.text(txt, fontBold, math.Min(r.H*0.8, 40), rest, 0, 0.5)

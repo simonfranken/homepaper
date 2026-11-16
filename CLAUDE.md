@@ -49,6 +49,7 @@ espflash flash --monitor target/xtensa-esp32s3-espidf/release/homepaper-fw   # n
 - The partition table (`firmware/partitions.csv`, 3 MB factory app, fits 4 MB flash) is applied by **espflash** through `espflash.toml`, not by ESP-IDF. Run espflash from `firmware/`.
 - After changing `extra_components` in `firmware/Cargo.toml`, run `cargo clean -p esp-idf-sys`. Otherwise a stale build may lack the new component's bindings.
 - `ws.rs` uses the C `esp_websocket_client` API directly because the safe wrapper can't reassemble fragmented messages. A 48 KB frame arrives in many chunks. Buffers are allocated once at boot and must never grow.
+- The BDF files in `server/internal/render/fonts/lucida/` must stay byte-for-byte unmodified (their license). Don't subset, convert or patch them; handle missing glyphs in code (`bitmapFace` falls back to the Go font).
 - In `server/`, `coder/websocket` has a 32 KB default read limit. The HA client raises it, because `get_states` responses are large.
 - When killing the dev server, use `pkill -x homepaper`, not `pkill -f bin/homepaper`, which also matches your own shell.
 - HA's WebSocket API rejects message IDs that don't increase within a connection ("Identifier values have to increase"). The HA client subscribes with id 1, then sends `get_states` with id 2. Keep that order when adding requests.

@@ -6,6 +6,7 @@ import (
 	"image"
 	"image/color"
 	"image/draw"
+	"math"
 	"sync"
 	"time"
 
@@ -41,8 +42,13 @@ func Render(layout store.Layout, panel store.Panel, states *ha.Store, now time.T
 		if !ok {
 			continue
 		}
-		r := rect{X: float64(wg.X) * cw, Y: float64(wg.Y) * ch, W: float64(wg.W) * cw, H: float64(wg.H) * ch}
-		c := &ctx{dc: dc, states: states, now: now, opts: wg.Options}
+		// Whole-pixel cell edges, so frames and text sit on the grid even
+		// when the panel size isn't a multiple of the cell count.
+		x0, y0 := math.Round(float64(wg.X)*cw), math.Round(float64(wg.Y)*ch)
+		x1, y1 := math.Round(float64(wg.X+wg.W)*cw), math.Round(float64(wg.Y+wg.H)*ch)
+		r := rect{X: x0, Y: y0, W: x1 - x0, H: y1 - y0}
+		clip := image.Rect(int(x0), int(y0), int(x1), int(y1)).Inset(frameGap/2 + 2)
+		c := &ctx{dc: dc, states: states, now: now, opts: wg.Options, clip: clip}
 		if c.boolOpt("border", true) {
 			drawFrame(dc, r)
 		}

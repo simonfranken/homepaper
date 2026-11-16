@@ -32,15 +32,21 @@ The renderer is **native Go**, in the backend:
 - Headless Chromium (chromedp) and a Satori/resvg sidecar were rejected, see D-011.
 
 **As implemented** (`server/internal/render`):
-- It draws anti-aliased with `fogleman/gg` into an RGBA canvas, converts to greyscale, and thresholds at 128 into a `frame.Bitmap`.
-- Text uses the embedded Go fonts, with full hinting ([P-013](decisions.md#p-013)).
-- `ctx.text` fits text into a rectangle by shrinking the font and places it by cap height, so digits sit optically centred.
+- It draws shapes anti-aliased with `fogleman/gg` into an RGBA canvas, converts to greyscale, and thresholds at 128 into a `frame.Bitmap`. Widget rectangles are rounded to whole pixels.
+- Text ([P-013](decisions.md#p-013)):
+  - **Bitmap fonts (Lucida Sans BDF, `bdf.go`) up to 25 px and at 34 px.** They are drawn pixel for pixel. Glyphs a font lacks come from the Go font on the same baseline.
+  - **The Go fonts above that**, with hinting, then thresholded.
+  - Text is drawn with `font.Drawer` straight onto the canvas, not through `gg`, which resamples every glyph. It sits on whole pixels: a fractional origin made the threshold eat stems unevenly. It is clipped to its widget.
+- `ctx.text` fits text into a rectangle by picking from a fixed size scale (`sizeSteps`), not by shrinking continuously. It places text by cap height, so digits sit optically centred.
+  - Content shrinks down to 12 px, then is shortened with "...".
+  - Labels are 17 px, may step down to 14 px, and are then shortened.
+  - Widgets drop secondary text before they cut primary text (e.g. weather drops humidity).
 - Icons (weather, bulb, status dot) are solid shapes and thick strokes, drawn in code, with no image assets.
 - All rendering is serialized by one mutex, because font faces aren't safe for concurrent use. A render takes milliseconds.
 
 ## E-ink considerations
 
-- **1-bit typography.** Anti-aliased text breaks up when converted to pure black and white. Prefer **bitmap fonts (BDF)** at fixed sizes. For large display numbers, use vector fonts with a hard threshold (bold enough at the chosen sizes). **Never dither text.**
+- **1-bit typography.** Anti-aliased text breaks up when converted to pure black and white. Prefer **bitmap fonts (BDF)** at fixed sizes (implemented, see above). For large display numbers, use vector fonts with a hard threshold (bold enough at the chosen sizes). **Never dither text.**
 - **Dither only images and icons** (e.g. weather icons, charts with fills). Floyd–Steinberg or ordered dithering.
 - **Design for paper**: high contrast, generous whitespace, no thin grey lines.
 - **Grey mode** (4 levels, 2bpp) is possible but has no partial refresh. That makes it a later option, not the default ([O-003](decisions.md#o-003)).

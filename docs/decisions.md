@@ -37,7 +37,7 @@ When an item changes status, update it here (status, date, rationale) and in the
 | [P-010](#p-010) | Device setup: SoftAP portal, settings in NVS | Proposed |
 | [P-011](#p-011) | Server storage: one JSON file | Proposed |
 | [P-012](#p-012) | Web UI auth: none by default, optional basic auth | Proposed |
-| [P-013](#p-013) | Fonts: Go font family, thresholded (BDF later) | Proposed |
+| [P-013](#p-013) | Fonts: Lucida Sans bitmaps for small text, Go fonts for large | Proposed |
 | [O-001](#o-001) | ~~Hardware route~~ | Answered by P-008 |
 | [O-002](#o-002) | ~~Is an ESP32-S3 dev board on hand?~~ | Answered: yes |
 | [O-003](#o-003) | Grey mode (4 levels) | Open |
@@ -145,7 +145,12 @@ The Wi-Fi password and token are never shown in the form; an empty field keeps t
 **Web UI authentication: none by default**, meant for a trusted LAN. Setting `HOMEPAPER_PASSWORD` turns on HTTP basic auth for the UI and API. The device WebSocket always authenticates with device tokens. An HA add-on with ingress would replace this ([O-004](#o-004)). Without a password, anyone on the LAN can also change the Home Assistant connection (`PUT /api/settings/ha`); the server tests a new address before saving, but the request itself is unauthenticated.
 
 ### P-013
-**Fonts: the Go font family** (embedded), rasterized with hinting and hard-thresholded to 1 bit. That's good enough at the sizes used. Bitmap fonts (BDF) for small text remain the plan from [D-011](#d-011).
+**Fonts: Lucida Sans bitmap fonts up to 25 px (and at 34 px), the Go fonts above** (2026-11-11, replacing "Go fonts, thresholded"). This carries out the bitmap-font plan from [D-011](#d-011).
+- Why: a comparison of approaches at panel resolution showed that a thresholded outline renders stems unevenly below about 25 px, whatever the font. Running real TrueType hinting (`golang/freetype`) didn't change that for the Go fonts. DejaVu and Liberation stay even, but their 1 px strokes are too light for paper. The hand-drawn Lucida Sans bitmaps were clearly the most legible.
+- Which: the X.Org `bh-75dpi`/`bh-100dpi` BDF files, regular and bold, at 12, 14, 17, 20, 25 and 34 px. They are by Bigelow & Holmes, who also drew the Go fonts, so the two match. They cover Latin-1 (umlauts, °, ·, –, €), but not "→"; per-glyph fallback takes that from the Go font on the same baseline.
+- License: the files must stay **unmodified**, and their notice must appear in code comments and user documentation. It is in `server/internal/render/fonts.go`, the README and `fonts/lucida/COPYING`. The font's own "…" has only two dots, so shortened text ends in "...".
+- How text is sized: from a fixed scale (bitmap sizes, then whole vector pixel sizes from 26 px), placed on whole pixels and clipped to its widget. Labels are 17 px, step down to 14 px, then get shortened. Content shrinks to 12 px before it is shortened.
+- Alternatives that were considered: Helvetica bitmaps (too light), Spleen and Terminus (monospace), and TRMNL-style pixel fonts.
 
 ## Open
 

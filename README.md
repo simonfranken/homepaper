@@ -89,6 +89,16 @@ cd server && make fakedevice
 
 This speaks the device protocol like the firmware, and writes what a panel would show to `frame.png`.
 
+## Fonts
+
+The panel's text is set in the Go fonts (BSD license) and, for small sizes, in the Lucida Sans bitmap fonts from the X.Org `bh-75dpi` and `bh-100dpi` packages, included unmodified:
+
+> (c) Copyright 1989 Sun Microsystems, Inc. Sun design patents pending in the U.S. and foreign countries. OPEN LOOK is a trademark of AT&T. Used by written permission of the owners.
+>
+> (c) Copyright Bigelow & Holmes 1986, 1985. Lucida is a registered trademark of Bigelow & Holmes. Permission to use the Lucida trademark is hereby granted only in association with the images and fonts described in this file.
+
+The full notice is in [`server/internal/render/fonts/lucida/COPYING`](server/internal/render/fonts/lucida/COPYING).
+
 ## Documentation
 
 Design notes and decisions are in [`docs/`](docs/README.md):

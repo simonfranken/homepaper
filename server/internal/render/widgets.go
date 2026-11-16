@@ -123,10 +123,10 @@ func init() {
 		render: renderLights,
 	})
 	register(&Kind{
-		Name: "binary", Label: "State", Description: "Open or closed, on or off, home or away.",
+		Name: "binary", Label: "State", Description: "Open or closed, on or off, home or away, armed or disarmed.",
 		MinW: 1, MinH: 1, DefaultW: 2, DefaultH: 1,
 		Fields: []Field{
-			{Key: "entity", Label: "Entity", Type: FieldEntity, Domains: []string{"binary_sensor", "switch", "input_boolean", "person", "light", "lock", "cover"}, Required: true},
+			{Key: "entity", Label: "Entity", Type: FieldEntity, Domains: []string{"binary_sensor", "switch", "input_boolean", "person", "light", "lock", "cover", "alarm_control_panel"}, Required: true},
 			labelField,
 			alignField,
 		},

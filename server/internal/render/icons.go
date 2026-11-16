@@ -306,3 +306,43 @@ func (c *ctx) dot(cx, cy, s float64, active bool) {
 		c.dc.Stroke()
 	}
 }
+
+type shieldFill int
+
+const (
+	shieldHollow shieldFill = iota
+	shieldHalf
+	shieldSolid
+)
+
+// shield is the alarm icon. Its fill tells the state, like the status dots.
+func (c *ctx) shield(cx, cy, s float64, fill shieldFill) {
+	c.setInk()
+	dc := c.dc
+	path := func() {
+		dc.MoveTo(cx, cy-s*0.45)
+		dc.LineTo(cx+s*0.34, cy-s*0.3)
+		dc.LineTo(cx+s*0.34, cy+s*0.02)
+		dc.CubicTo(cx+s*0.34, cy+s*0.26, cx+s*0.16, cy+s*0.4, cx, cy+s*0.48)
+		dc.CubicTo(cx-s*0.16, cy+s*0.4, cx-s*0.34, cy+s*0.26, cx-s*0.34, cy+s*0.02)
+		dc.LineTo(cx-s*0.34, cy-s*0.3)
+		dc.ClosePath()
+	}
+	if fill == shieldSolid {
+		path()
+		dc.Fill()
+		return
+	}
+	if fill == shieldHalf {
+		// Push/Pop keep the widget's clip; Clip narrows it to the left half.
+		dc.Push()
+		dc.DrawRectangle(cx-s, cy-s, s, 2*s)
+		dc.Clip()
+		path()
+		dc.Fill()
+		dc.Pop()
+	}
+	dc.SetLineWidth(math.Max(2.5, s*0.09))
+	path()
+	dc.Stroke()
+}

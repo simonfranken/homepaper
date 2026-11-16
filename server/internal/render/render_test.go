@@ -23,6 +23,7 @@ var update = flag.Bool("update", false, "rewrite the golden images in docs/desig
 func TestBitmapCoverage(t *testing.T) {
 	strs := []string{unavailable, "Not available", "Set to", "All off", "of on", "°", "·", "%", "...",
 		"Home", "Away", "Locked", "Unlocked", "Open", "Closed", "Detected", "Clear", "On", "Off",
+		"Disarmed Armed home away night vacation custom Arming Disarming Pending Triggered Off Home Away Night Vacation Custom Disarm Alarm",
 		"0123456789.,-+ ", "Heating Cooling Idle Off Heat Cool Auto Drying Fan",
 		"Mon Tue Wed Thu Fri Sat Sun Monday Tuesday Wednesday Thursday Friday Saturday Sunday",
 		"January February March April May June July August September October November December",
@@ -272,5 +273,30 @@ func TestAlignment(t *testing.T) {
 		if align == "left" && rightmost > 600 {
 			t.Errorf("left-aligned text reaches x=%d", rightmost)
 		}
+	}
+}
+
+// Every alarm_control_panel state has its own word and shield, and none is
+// drawn inverted (only doors, windows, garages and locks are, D-015).
+func TestAlarmStates(t *testing.T) {
+	st := demoStates(t)
+	states := []string{"disarmed", "armed_home", "armed_away", "armed_night", "armed_vacation",
+		"armed_custom_bypass", "arming", "disarming", "pending", "triggered"}
+	var ws []store.Widget
+	for i, state := range states {
+		id := "alarm_control_panel.a" + state
+		st.Set(id, &ha.Entity{ID: id, State: state, Attributes: map[string]any{"friendly_name": "Alarm"}})
+		ws = append(ws, store.Widget{ID: state, Kind: "binary", X: (i % 4) * 2, Y: i / 4, W: 2, H: 1, Options: map[string]any{"entity": id}})
+		ws = append(ws, store.Widget{ID: state + "s", Kind: "binary", X: i % 8, Y: 3 + i/8, W: 1, H: 1, Options: map[string]any{"entity": id}})
+		if word, _ := binaryText("alarm_control_panel", "", state); word == "Off" || word == "On" {
+			t.Errorf("%s reads %q", state, word)
+		}
+		if alertState("alarm_control_panel", "", state) {
+			t.Errorf("%s is drawn inverted", state)
+		}
+	}
+	g := Render(store.Layout{Cols: 8, Rows: 6, Widgets: ws}, store.DefaultPanel, st, goldenNow).ToGray()
+	if dir := os.Getenv("HOMEPAPER_RENDER_OUT"); dir != "" {
+		writePNG(t, filepath.Join(dir, "alarm.png"), g)
 	}
 }

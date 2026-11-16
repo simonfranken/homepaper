@@ -509,6 +509,8 @@ func binaryText(domain, class, state string) (string, bool) {
 		return "Unlocked", true
 	case "cover":
 		return strings.ToUpper(state[:min(1, len(state))]) + state[min(1, len(state)):], state == "open"
+	case "alarm_control_panel":
+		return alarmText(state)
 	}
 	switch class {
 	case "door", "window", "opening", "garage_door", "garage":
@@ -550,9 +552,51 @@ func binaryAlert(c *ctx) bool {
 	return ok && alertState(e.Domain(), e.Attr("device_class"), e.State)
 }
 
+// alarmStates are the alarm_control_panel states, worded as Home
+// Assistant's own UI words them. Armed states count as active.
+// The short word is used where the long one doesn't fit; the filled shield
+// then still says "armed".
+var alarmStates = map[string]struct {
+	text, short string
+	active      bool
+}{
+	"disarmed":            {"Disarmed", "Off", false},
+	"armed_home":          {"Armed home", "Home", true},
+	"armed_away":          {"Armed away", "Away", true},
+	"armed_night":         {"Armed night", "Night", true},
+	"armed_vacation":      {"Armed vacation", "Vacation", true},
+	"armed_custom_bypass": {"Armed custom", "Custom", true},
+	"arming":              {"Arming", "Arming", false},
+	"disarming":           {"Disarming", "Disarm", true},
+	"pending":             {"Pending", "Pending", true},
+	"triggered":           {"Triggered", "Alarm", true},
+}
+
+func alarmText(state string) (string, bool) {
+	if a, ok := alarmStates[state]; ok {
+		return a.text, a.active
+	}
+	return strings.ToUpper(state[:min(1, len(state))]) + strings.ReplaceAll(state[min(1, len(state)):], "_", " "), false
+}
+
+// alarmFill is how much of the shield is filled: solid when armed or
+// triggered, half while it changes over or waits, hollow when disarmed.
+func alarmFill(state string) shieldFill {
+	switch {
+	case state == "arming" || state == "disarming" || state == "pending":
+		return shieldHalf
+	case strings.HasPrefix(state, "armed") || state == "triggered":
+		return shieldSolid
+	}
+	return shieldHollow
+}
+
 func stateIcon(e ha.Entity, active bool) func(c *ctx, cx, cy, s float64) {
 	class := e.Attr("device_class")
 	switch {
+	case e.Domain() == "alarm_control_panel":
+		fill := alarmFill(e.State)
+		return func(c *ctx, cx, cy, s float64) { c.shield(cx, cy, s, fill) }
 	case e.Domain() == "lock":
 		return func(c *ctx, cx, cy, s float64) { c.lock(cx, cy, s, !active) }
 	case e.Domain() == "person":
@@ -574,8 +618,19 @@ func renderBinary(c *ctx, r R) {
 	}
 	word, active := binaryText(e.Domain(), e.Attr("device_class"), e.State)
 	icon := stateIcon(e, active)
+	short := word
+	if a, ok := alarmStates[e.State]; ok && e.Domain() == "alarm_control_panel" {
+		short = a.short
+	}
+	// shorter picks the short word when the long one doesn't fit w at px.
+	shorter := func(w, px int) {
+		if width(face(fontBold, px), word) > w {
+			word = short
+		}
+	}
 	if small(r) {
 		rest := c.smallLabel(r, label)
+		shorter(rest.W-26, 17)
 		px := fit(word, fontBold, []int{20, 17, 14}, rest.W-26, rest.H)
 		fb := face(fontBold, px)
 		base := rest.Y + (rest.H+capH(fb))/2
@@ -591,6 +646,7 @@ func renderBinary(c *ctx, r R) {
 		return
 	}
 	r = c.label(r, label)
+	shorter(r.W-36, 20)
 	px := fit(word, fontBold, []int{25, 20, 17}, r.W-36, r.H)
 	fb := face(fontBold, px)
 	base := r.Y + (r.H+capH(fb))/2

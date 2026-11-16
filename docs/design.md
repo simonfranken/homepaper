@@ -57,7 +57,7 @@ The structure stays as built (header with display tabs, Layout/Display switch, e
 - **Three text levels:** values; labels in Lucida 17 (14 in 1-cell widgets); detail in Lucida 14–20. Lucida 12 is for tertiary text only. It is about 1.7 mm tall at the panel's ~124 dpi.
 - **Rules, not boxes.** The default divider is a 2 px rule in the gutter between widgets, stopping 10 px short of crossings. Frames (today's look: 2 px, radius 8) remain as a layout-wide option.
 - **Inverted means act.** A widget turns black with white content only for states that need action: door, window or garage door open; lock unlocked. Lights, motion and presence never invert. They change often, and large changing black areas ghost under partial refresh.
-- **Icons draw the state:** door ajar, window tilted, shackle open, person hollow when away, flame only while heating, bulb filled when on.
+- **Icons draw the state:** door ajar, window tilted, shackle open, person hollow when away, flame only while heating, bulb filled when on, alarm shield hollow (disarmed), half (arming, pending) or solid (armed, triggered).
 - **Calm by default.** Idle is regular weight without an icon. Unavailable is "–" plus "Not available". All lights off says "All off".
 - **Alignment.** Single-block widgets (date/time, text, value, temperature, state) can be left-aligned (the default), centred or right-aligned. Label and content move together.
 - **Shrink by dropping, not squeezing.** Secondary information goes first, then type steps down. A primary value never goes below 20 px.

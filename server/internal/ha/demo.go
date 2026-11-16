@@ -28,6 +28,7 @@ func RunDemo(ctx context.Context, s *Store) {
 		e("binary_sensor.front_door", "off", map[string]any{"friendly_name": "Front door", "device_class": "door"}),
 		e("binary_sensor.bathroom_window", "on", map[string]any{"friendly_name": "Bathroom window", "device_class": "window"}),
 		e("person.alex", "home", map[string]any{"friendly_name": "Alex"}),
+		e("alarm_control_panel.home", "armed_away", map[string]any{"friendly_name": "Alarm"}),
 	})
 	s.SetForecast("weather.home", DemoForecast(now))
 	s.setConnected(true)

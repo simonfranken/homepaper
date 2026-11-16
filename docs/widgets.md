@@ -22,6 +22,7 @@ A snap grid such as **8 × 6 cells** on 800 × 480 (100 × 80 px per cell) is pr
 - Widgets have no frame option any more. The layout's **dividers** setting (`rules`, the default, or `frames`) separates them ([D-015](decisions.md#d-015)).
 - **Weather** shows today's high and low and a strip of the next days from `weather.get_forecasts` when the widget is two rows tall.
 - **Alignment** (left, the default; centre; right) on Date / time, Text, Value, Temperature and State moves the label and content as one group. A heading's rule fills the space the text leaves, on both sides when centred. Weather, Lights and Thermostat have column layouts and no alignment.
+- **Alarm panels** (`alarm_control_panel`) in the State widget read "Disarmed", "Armed away", "Arming", "Triggered" and so on, falling back to a short word ("Away") where the long one doesn't fit. The shield icon is hollow when disarmed, half-filled while arming, disarming or pending, and solid when armed or triggered. Alarms are not drawn inverted.
 - **Text** sizes: small is a one-line note, medium a heading followed by a rule, large a big bold line.
 - Doors, windows and garages that are open, and unlocked locks, are drawn **inverted**. Nothing else is.
 - Fields can carry a `placeholder` (what an empty input means) and a one-line `help`; select `choices` are `{value, label}` pairs, so the editor shows "Date and time (Mon 2 Jan, 15:04)" instead of `datetime`. An empty **Decimals** shows the value as HA reports it.
@@ -38,7 +39,7 @@ This list comes from the initial idea: current temperature, weather, sensor data
 | **Climate** | Current and target temperature, HVAC mode | `climate.*` (`current_temperature`, `temperature`, `hvac_action`) |
 | **Weather** | Condition icon, temperature, short forecast | `weather.*` (forecast through the HA `weather.get_forecasts` service) |
 | **Light** | On/off state, optionally brightness. Can also list several lights | `light.*` |
-| **Binary state** | Open/closed, on/off, present/away with icon | `binary_sensor.*`, `switch.*`, `person.*` |
+| **Binary state** | Open/closed, on/off, present/away, alarm armed/disarmed, with icon | `binary_sensor.*`, `switch.*`, `person.*`, `lock.*`, `cover.*`, `alarm_control_panel.*` |
 | **Clock / date** | Date, time or both. The server re-renders every minute, so a time display costs one small partial refresh per minute. | none |
 | **Text / heading** | Static label or section title | none |
 

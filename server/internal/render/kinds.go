@@ -2,6 +2,7 @@ package render
 
 import (
 	"fmt"
+	"image/color"
 	"math"
 	"strings"
 	"time"
@@ -548,6 +549,9 @@ func alertState(domain, class, state string) bool {
 }
 
 func binaryAlert(c *ctx) bool {
+	if len(c.entityList("entity")) > 1 {
+		return false // a list inverts the rows that need action, not itself
+	}
 	e, ok := c.entity("entity")
 	return ok && alertState(e.Domain(), e.Attr("device_class"), e.State)
 }
@@ -610,6 +614,10 @@ func stateIcon(e ha.Entity, active bool) func(c *ctx, cx, cy, s float64) {
 }
 
 func renderBinary(c *ctx, r R) {
+	if ids := c.entityList("entity"); len(ids) > 1 {
+		renderStateList(c, r, ids)
+		return
+	}
 	e, ok := c.entity("entity")
 	label := c.str("label", e.Name())
 	if !ok {
@@ -654,6 +662,71 @@ func renderBinary(c *ctx, r R) {
 	x := c.alignX(r, 36+width(fb, word))
 	icon(c, float64(x+13), float64(base-capH(fb)/2), 28)
 	c.T(word, fontBold, px, x+36, base, 0)
+}
+
+// renderStateList draws several entities as rows: icon, name, state. A row
+// that asks for action is inverted on its own (D-015).
+func renderStateList(c *ctx, r R, ids []string) {
+	if heading := c.str("label", ""); heading != "" {
+		r = c.label(r, heading)
+	}
+	rowH := min(r.H/len(ids), 40)
+	if rowH < 22 {
+		rowH = 22 // too many entities: show those that fit, never squeeze
+	}
+	px := 17
+	if rowH < 28 {
+		px = 14
+	}
+	ink := c.ink
+	prevAlert := false
+	for i, id := range ids {
+		y := r.Y + i*rowH
+		if y+rowH > r.bottom()+2 {
+			break
+		}
+		e, ok := c.states.Get(id)
+		name := e.Name()
+		if !ok {
+			name = id
+		}
+		word, active, alert := unavailable, false, false
+		if ok && e.State != "unavailable" && e.State != "unknown" {
+			word, active = binaryText(e.Domain(), e.Attr("device_class"), e.State)
+			alert = alertState(e.Domain(), e.Attr("device_class"), e.State)
+		}
+		if alert {
+			c.setInk()
+			c.dc.DrawRoundedRectangle(float64(r.X-6), float64(y+2), float64(r.W+12), float64(rowH-4), 6)
+			c.dc.Fill()
+			c.ink = color.Gray{255 - ink.Y}
+		} else if i > 0 && !prevAlert {
+			c.dotted(r.X, r.right(), y)
+		}
+		prevAlert = alert
+
+		cy := y + rowH/2
+		is := math.Min(22, float64(rowH)-8)
+		stateIcon(e, active)(c, float64(r.X)+is/2+1, float64(cy), is)
+		wid := fontRegular
+		if active {
+			wid = fontBold
+		}
+		fw := face(wid, px)
+		base := cy + capH(fw)/2
+		nx := r.X + int(is) + 10
+		// The state word wins over the name; narrow rows take the short
+		// alarm word, and anything still too wide is shortened.
+		if room := r.right() - nx; width(fw, word) > room {
+			if a, ok := alarmStates[e.State]; ok && e.Domain() == "alarm_control_panel" {
+				word = a.short
+			}
+			word = ellip(word, wid, px, room)
+		}
+		ww := c.T(word, wid, px, r.right(), base, 1)
+		c.T(ellip(name, fontRegular, px, r.right()-ww-10-nx), fontRegular, px, nx, base, 0)
+		c.ink = ink
+	}
 }
 
 // ---------- clock ----------

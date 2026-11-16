@@ -300,3 +300,29 @@ func TestAlarmStates(t *testing.T) {
 		writePNG(t, filepath.Join(dir, "alarm.png"), g)
 	}
 }
+
+// A State widget with several entities lists them; rows that ask for
+// action are inverted, the widget itself is not.
+func TestStateList(t *testing.T) {
+	st := demoStates(t) // bathroom window open, front door closed
+	list := "binary_sensor.front_door, binary_sensor.bathroom_window, person.alex, alarm_control_panel.home, lock.missing"
+	ws := []store.Widget{
+		{ID: "a", Kind: "binary", X: 0, Y: 0, W: 3, H: 3, Options: map[string]any{"entity": list, "label": "House"}},
+		{ID: "b", Kind: "binary", X: 3, Y: 0, W: 2, H: 2, Options: map[string]any{"entity": list}},
+		{ID: "c", Kind: "binary", X: 5, Y: 0, W: 3, H: 1, Options: map[string]any{"entity": list}},
+		{ID: "d", Kind: "binary", X: 5, Y: 1, W: 1, H: 2, Options: map[string]any{"entity": list}},
+		{ID: "e", Kind: "binary", X: 0, Y: 3, W: 4, H: 2, Options: map[string]any{"entity": "binary_sensor.front_door, person.alex", "label": "Front"}},
+		{ID: "f", Kind: "binary", X: 4, Y: 3, W: 2, H: 1, Options: map[string]any{"entity": "binary_sensor.front_door"}},
+	}
+	l := store.Layout{Cols: 8, Rows: 6, Widgets: ws}
+	for _, w := range ws {
+		c := &ctx{states: st, opts: w.Options}
+		if kinds["binary"].alert(c) {
+			t.Errorf("widget %s is inverted as a whole", w.ID)
+		}
+	}
+	g := Render(l, store.DefaultPanel, st, goldenNow).ToGray()
+	if dir := os.Getenv("HOMEPAPER_RENDER_OUT"); dir != "" {
+		writePNG(t, filepath.Join(dir, "state-list.png"), g)
+	}
+}

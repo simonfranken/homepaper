@@ -126,8 +126,12 @@ func init() {
 		Name: "binary", Label: "State", Description: "Open or closed, on or off, home or away, armed or disarmed.",
 		MinW: 1, MinH: 1, DefaultW: 2, DefaultH: 1,
 		Fields: []Field{
-			{Key: "entity", Label: "Entity", Type: FieldEntity, Domains: []string{"binary_sensor", "switch", "input_boolean", "person", "light", "lock", "cover", "alarm_control_panel"}, Required: true},
-			labelField,
+			// Stored under "entity" as a comma-separated list, so widgets
+			// saved with a single entity keep working.
+			{Key: "entity", Label: "Entities", Type: FieldEntities, Domains: []string{"binary_sensor", "switch", "input_boolean", "person", "light", "lock", "cover", "alarm_control_panel"}, Required: true,
+				Help: "One entity shows large. Two or more show as a list, one row each."},
+			{Key: "label", Label: "Label", Type: FieldText, Placeholder: "Entity name; none for a list",
+				Help: "With several entities, a heading above the list."},
 			alignField,
 		},
 		render: renderBinary,

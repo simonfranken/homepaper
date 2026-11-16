@@ -78,6 +78,12 @@ func renderTemperature(c *ctx, r R) {
 		return
 	}
 	r = c.label(r, label)
+	if hum, ok := c.entity("humidity_entity"); ok && r.H < 90 {
+		// One row tall: humidity on the temperature's line, at the far side.
+		if c.inlineHumidity(r, whole, frac, formatNumber(hum.State, 0)+" %") {
+			return
+		}
+	}
 	main := r
 	if hum, ok := c.entity("humidity_entity"); ok && r.H >= 90 {
 		main = R{r.X, r.Y, r.W, r.H - 26}
@@ -89,6 +95,52 @@ func renderTemperature(c *ctx, r R) {
 		c.T(txt, fontRegular, 17, x+18, y, 0)
 	}
 	c.bigNumber(main, whole, frac, 80, c.ax)
+}
+
+// inlineHumidity draws the temperature and the humidity on one line: the
+// temperature on the aligned side, the humidity at the opposite edge (side
+// by side when centred). The temperature may step down to 34 px to make
+// room; below that the humidity is dropped, and this reports false having
+// drawn nothing.
+func (c *ctx) inlineHumidity(r R, whole, frac, hum string) bool {
+	const gap = 16
+	fr := face(fontRegular, 17)
+	hw := 18 + width(fr, hum) // droplet, then the number
+	numW := func(s int) int {
+		return width(face(fontBold, s), whole) + 1 + width(face(fontBold, smallFor(s)), frac)
+	}
+	px := 0
+	for _, s := range bigSizes {
+		if s > 80 || s < 34 || capH(face(fontBold, s)) > r.H {
+			continue
+		}
+		if numW(s)+gap+hw <= r.W {
+			px = s
+			break
+		}
+	}
+	if px == 0 {
+		return false
+	}
+	fb, fs := face(fontBold, px), face(fontBold, smallFor(px))
+	vw := numW(px)
+	var vx, hx int
+	switch {
+	case c.ax >= 1:
+		hx, vx = r.X, r.right()-vw
+	case c.ax > 0:
+		vx = c.alignX(r, vw+gap+hw)
+		hx = vx + vw + gap
+	default:
+		vx, hx = r.X, r.right()-hw
+	}
+	ch := capH(fb)
+	base := r.Y + (r.H+ch)/2
+	x := vx + c.T(whole, fontBold, px, vx, base, 0)
+	c.T(frac, fontBold, smallFor(px), x+1, base-ch+capH(fs), 0)
+	c.droplet(float64(hx+6), float64(base-capH(fr)/2-1), 14)
+	c.T(hum, fontRegular, 17, hx+18, base, 0)
+	return true
 }
 
 // ---------- value ----------

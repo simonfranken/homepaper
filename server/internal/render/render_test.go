@@ -326,3 +326,57 @@ func TestStateList(t *testing.T) {
 		writePNG(t, filepath.Join(dir, "state-list.png"), g)
 	}
 }
+
+// One-row temperature widgets show humidity on the temperature's line when
+// both fit, and drop it otherwise.
+func TestInlineHumidity(t *testing.T) {
+	st := demoStates(t)
+	temp := func(id, v, unit string) string {
+		st.Set(id, &ha.Entity{ID: id, State: v, Attributes: map[string]any{"friendly_name": "Temperature", "unit_of_measurement": unit}})
+		return id
+	}
+	hot := temp("sensor.t_hot", "104.0", "°F")
+	cold := temp("sensor.t_cold", "-12.5", "°C")
+	w := func(id string, x, y, ww, h int, entity, align string, hum bool) store.Widget {
+		o := map[string]any{"entity": entity, "align": align}
+		if hum {
+			o["humidity_entity"] = "sensor.living_room_humidity"
+		}
+		return store.Widget{ID: id, Kind: "temperature", X: x, Y: y, W: ww, H: h, Options: o}
+	}
+	lr := "sensor.living_room_temperature"
+	l := store.Layout{Cols: 8, Rows: 6, Widgets: []store.Widget{
+		w("before", 0, 0, 2, 1, lr, "left", false),
+		w("left", 2, 0, 2, 1, lr, "left", true),
+		w("center", 4, 0, 2, 1, lr, "center", true),
+		w("right", 6, 0, 2, 1, lr, "right", true),
+		w("w3", 0, 1, 3, 1, lr, "left", true),
+		w("w4", 3, 1, 4, 1, lr, "left", true),
+		w("one", 7, 1, 1, 1, lr, "left", true),
+		w("cold", 0, 2, 2, 1, cold, "left", true),
+		w("hot", 2, 2, 2, 1, hot, "left", true),
+		w("tall", 4, 2, 2, 2, lr, "left", true),
+	}}
+	g := Render(l, store.DefaultPanel, st, goldenNow).ToGray()
+	if dir := os.Getenv("HOMEPAPER_RENDER_OUT"); dir != "" {
+		writePNG(t, filepath.Join(dir, "inline-humidity.png"), g)
+	}
+	ink := func(x0, y0, x1, y1 int) bool {
+		for y := y0; y < y1; y++ {
+			for x := x0; x < x1; x++ {
+				if g.GrayAt(x, y).Y == 0 {
+					return true
+				}
+			}
+		}
+		return false
+	}
+	// Left-aligned 2×1 with humidity: ink near the right edge of its cell.
+	if !ink(330, 40, 388, 70) {
+		t.Error("2×1 shows no humidity at its right edge")
+	}
+	// Without humidity, the same area stays empty.
+	if ink(130, 40, 188, 70) {
+		t.Error("2×1 without a humidity sensor draws something at its right edge")
+	}
+}

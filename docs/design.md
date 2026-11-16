@@ -67,7 +67,7 @@ The structure stays as built (header with display tabs, Layout/Display switch, e
 
 | Kind | Small | Large | Drops first |
 |---|---|---|---|
-| Temperature | 1×1: label 14, value Lucida Bold 34 | 2×2+: value 64–88, droplet + humidity at the bottom | humidity |
+| Temperature | 1×1: label 14, value Lucida Bold 34. One row, 2+ wide: humidity on the value's line at the far edge; the value may step down to 34 to keep it | 2×2+: value 64–88, droplet + humidity at the bottom | humidity |
 | Value | 1×1: value + unit at 17 | 2×1+: device-class icon, unit Lucida 25 on the baseline | icon |
 | Thermostat | 1 row: "21.4° ▸ 22.0°", action + flame from 4 wide | 2 rows: current 88 left; "Set to", target and action right of a rule | action |
 | Weather | 2×1: icon + temperature | 4×2: condition, high/low (▲▼), humidity, 5-day strip | forecast, humidity, high/low, condition |

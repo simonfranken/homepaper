@@ -278,6 +278,11 @@ func validateLayout(l *store.Layout) error {
 	if l.Cols < 1 || l.Cols > 24 || l.Rows < 1 || l.Rows > 24 {
 		return errors.New("grid must be between 1x1 and 24x24")
 	}
+	switch l.Dividers {
+	case "", store.DividersRules, store.DividersFrames:
+	default:
+		return fmt.Errorf("dividers must be %q or %q", store.DividersRules, store.DividersFrames)
+	}
 	seen := map[string]bool{}
 	for i := range l.Widgets {
 		wg := &l.Widgets[i]
@@ -294,6 +299,8 @@ func validateLayout(l *store.Layout) error {
 		if wg.Options == nil {
 			wg.Options = map[string]any{}
 		}
+		// The per-widget frame option was replaced by layout dividers (D-015).
+		delete(wg.Options, "border")
 	}
 	return nil
 }

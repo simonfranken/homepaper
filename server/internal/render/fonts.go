@@ -70,9 +70,6 @@ var (
 	faces       = map[string]font.Face{}
 )
 
-// maxBitmapPx is the largest bitmap size; bigger text is vector.
-const maxBitmapPx = 34
-
 func init() {
 	for id, data := range vectorData {
 		f, err := opentype.Parse(data)
@@ -99,25 +96,6 @@ func init() {
 		bitmapSizes = append(bitmapSizes, px)
 	}
 	sort.Ints(bitmapSizes)
-}
-
-// sizeSteps are the pixel sizes text may be set at, ascending: the bitmap
-// sizes up to 25 px, where hand-placed pixels matter most, then every whole
-// pixel size (vector, except 34, which has a bitmap).
-func sizeSteps(maxPx float64) []int {
-	var out []int
-	for _, px := range bitmapSizes {
-		if px <= 25 && float64(px) <= maxPx {
-			out = append(out, px)
-		}
-	}
-	for px := 26; float64(px) <= maxPx; px++ {
-		out = append(out, px)
-	}
-	if len(out) == 0 {
-		out = append(out, bitmapSizes[0])
-	}
-	return out
 }
 
 // face returns a cached face at a pixel size: the bitmap font when there is

@@ -212,8 +212,18 @@ func TestValidateLayout(t *testing.T) {
 	if ok.Widgets[0].Options == nil {
 		t.Fatal("nil options not normalised")
 	}
+	// The old per-widget frame option is dropped; layout dividers replace it.
+	old := store.Layout{Cols: 8, Rows: 6, Dividers: store.DividersFrames, Widgets: []store.Widget{
+		{ID: "a", Kind: "clock", W: 2, H: 1, Options: map[string]any{"border": false, "format": "time"}}}}
+	if err := validateLayout(&old); err != nil {
+		t.Fatal(err)
+	}
+	if _, has := old.Widgets[0].Options["border"]; has || old.Widgets[0].Options["format"] != "time" {
+		t.Fatalf("options not cleaned: %v", old.Widgets[0].Options)
+	}
 	bad := []store.Layout{
 		{Cols: 0, Rows: 6},
+		{Cols: 8, Rows: 6, Dividers: "boxes"},
 		{Cols: 8, Rows: 6, Widgets: []store.Widget{{ID: "a", Kind: "nope", W: 1, H: 1}}},
 		{Cols: 8, Rows: 6, Widgets: []store.Widget{{ID: "a", Kind: "clock", X: 7, W: 2, H: 1}}},
 		{Cols: 8, Rows: 6, Widgets: []store.Widget{{ID: "a", Kind: "clock", W: 1, H: 1}, {ID: "a", Kind: "clock", X: 1, W: 1, H: 1}}},

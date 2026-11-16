@@ -44,17 +44,17 @@ The renderer is **native Go**, in the backend:
 - Icons (weather, bulb, status dot) are solid shapes and thick strokes, drawn in code, with no image assets.
 - All rendering is serialized by one mutex, because font faces aren't safe for concurrent use. A render takes milliseconds.
 
-## Planned: panel redesign ([D-015](decisions.md#d-015))
+## Panel design ([D-015](decisions.md#d-015))
 
-The agreed design in [design.md](design.md#panel-d-015) needs these renderer additions:
-- layout-level dividers (column rules by default, frames as an option), replacing the per-widget `border` option;
+The renderer draws the design in [design.md](design.md#panel-d-015) (implemented 2026-11-16). `kinds.go` holds the widgets and `draw.go` the primitives:
+- layout-level dividers (`Layout.Dividers`: column rules by default, frames as an option), replacing the per-widget `border` option, which the API now drops;
 - inverted widgets for states that need action;
 - drawn triangles and arrows;
 - numbers with a small raised decimal;
 - brightness meters and dotted row separators;
 - state icons (door, window, lock, person, droplet, flame, bolt).
 
-The 1-bit mockups in `docs/design/` are reference images for it.
+`TestGolden` renders the example layout with demo data at Mon 16 Nov 2026 18:42 and compares it pixel for pixel with `docs/design/hero-*.png`. After an intended change, `go test ./internal/render -run Golden -update` rewrites those images. Look at them before committing. `TestEveryKindEverySize` renders every kind at every size, with its entities present and unavailable, and fails on ink outside the cell. Set `HOMEPAPER_RENDER_OUT=dir` to write the images out for a look.
 
 ## E-ink considerations
 

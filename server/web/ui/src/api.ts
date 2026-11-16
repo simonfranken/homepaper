@@ -35,9 +35,13 @@ export interface Widget {
   options: Record<string, unknown>
 }
 
+export type Dividers = 'rules' | 'frames'
+
 export interface Layout {
   cols: number
   rows: number
+  /** How widgets are separated; empty means rules (D-015). */
+  dividers?: Dividers
   widgets: Widget[]
 }
 

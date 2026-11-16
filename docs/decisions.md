@@ -26,7 +26,7 @@ When an item changes status, update it here (status, date, rationale) and in the
 | [D-012](#d-012) | Firmware: Rust + esp-idf-svc | Decided |
 | [D-013](#d-013) | HA URL and token configured in the web UI | Decided, implemented |
 | [D-014](#d-014) | One design language for web UI and panel | Decided, not implemented |
-| [D-015](#d-015) | Panel redesign: widgets, rules, inversion | Decided, not implemented |
+| [D-015](#d-015) | Panel redesign: widgets, rules, inversion | Decided, implemented |
 | [P-001](#p-001) | ~~Server stack: TypeScript / Node~~ | Superseded by D-009, D-010 |
 | [P-002](#p-002) | ~~Renderer: Satori + resvg~~ | Superseded by D-011 |
 | [P-003](#p-003) | Layout model: snap grid (e.g. 8×6) | Proposed |

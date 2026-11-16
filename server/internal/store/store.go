@@ -31,10 +31,18 @@ type Widget struct {
 }
 
 type Layout struct {
-	Cols    int      `json:"cols"`
-	Rows    int      `json:"rows"`
-	Widgets []Widget `json:"widgets"`
+	Cols int `json:"cols"`
+	Rows int `json:"rows"`
+	// Dividers separates widgets: DividersRules (the default, also when
+	// empty) or DividersFrames (D-015).
+	Dividers string   `json:"dividers,omitempty"`
+	Widgets  []Widget `json:"widgets"`
 }
+
+const (
+	DividersRules  = "rules"
+	DividersFrames = "frames"
+)
 
 // Panel describes the display a device reported in its hello message.
 type Panel struct {
@@ -231,19 +239,20 @@ func (s *Store) Update(id string, fn func(d *Device)) (Device, error) {
 // source; the API drops the widgets whose entities a real HA does not have.
 func ExampleLayout() Layout {
 	return Layout{
-		Cols: DefaultCols,
-		Rows: DefaultRows,
+		Cols:     DefaultCols,
+		Rows:     DefaultRows,
+		Dividers: DividersRules,
 		Widgets: []Widget{
-			{ID: "w1", Kind: "clock", X: 0, Y: 0, W: 4, H: 1, Options: map[string]any{"format": "date"}},
+			{ID: "w1", Kind: "clock", X: 0, Y: 0, W: 4, H: 1, Options: map[string]any{"format": "datetime"}},
 			{ID: "w2", Kind: "weather", X: 4, Y: 0, W: 4, H: 2, Options: map[string]any{"entity": "weather.home"}},
 			{ID: "w3", Kind: "temperature", X: 0, Y: 1, W: 2, H: 2, Options: map[string]any{"entity": "sensor.living_room_temperature", "humidity_entity": "sensor.living_room_humidity", "label": "Living room"}},
 			{ID: "w4", Kind: "temperature", X: 2, Y: 1, W: 2, H: 2, Options: map[string]any{"entity": "sensor.outdoor_temperature", "label": "Outdoor"}},
-			{ID: "w5", Kind: "climate", X: 0, Y: 3, W: 4, H: 1, Options: map[string]any{"entity": "climate.living_room"}},
-			{ID: "w6", Kind: "value", X: 4, Y: 2, W: 2, H: 2, Options: map[string]any{"entity": "sensor.power_consumption", "label": "Power", "decimals": 0.0}},
-			{ID: "w7", Kind: "binary", X: 6, Y: 2, W: 2, H: 1, Options: map[string]any{"entity": "binary_sensor.front_door"}},
-			{ID: "w8", Kind: "binary", X: 6, Y: 3, W: 2, H: 1, Options: map[string]any{"entity": "binary_sensor.bathroom_window"}},
-			{ID: "w9", Kind: "lights", X: 0, Y: 4, W: 4, H: 2, Options: map[string]any{"entities": "light.living_room, light.kitchen, light.hallway", "label": "Lights"}},
-			{ID: "w10", Kind: "text", X: 4, Y: 4, W: 4, H: 2, Options: map[string]any{"text": "homepaper", "size": "large"}},
+			{ID: "w5", Kind: "climate", X: 0, Y: 3, W: 4, H: 2, Options: map[string]any{"entity": "climate.living_room"}},
+			{ID: "w6", Kind: "lights", X: 4, Y: 2, W: 4, H: 3, Options: map[string]any{"entities": "light.living_room, light.kitchen, light.hallway", "label": "Lights"}},
+			{ID: "w7", Kind: "binary", X: 0, Y: 5, W: 2, H: 1, Options: map[string]any{"entity": "binary_sensor.front_door"}},
+			{ID: "w8", Kind: "binary", X: 2, Y: 5, W: 2, H: 1, Options: map[string]any{"entity": "binary_sensor.bathroom_window"}},
+			{ID: "w9", Kind: "binary", X: 4, Y: 5, W: 2, H: 1, Options: map[string]any{"entity": "person.alex"}},
+			{ID: "w10", Kind: "value", X: 6, Y: 5, W: 2, H: 1, Options: map[string]any{"entity": "sensor.power_consumption", "label": "Power"}},
 		},
 	}
 }

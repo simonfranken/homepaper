@@ -37,6 +37,12 @@ func Render(layout store.Layout, panel store.Panel, states *ha.Store, now time.T
 
 	cols, rows := max(layout.Cols, 1), max(layout.Rows, 1)
 	cw, ch := float64(w)/float64(cols), float64(h)/float64(rows)
+	frames := layout.Dividers == store.DividersFrames
+	type placed struct {
+		r     R
+		alert bool
+	}
+	var drawn []placed
 	for _, wg := range layout.Widgets {
 		k, ok := kinds[wg.Kind]
 		if !ok {
@@ -44,20 +50,44 @@ func Render(layout store.Layout, panel store.Panel, states *ha.Store, now time.T
 		}
 		// Whole-pixel cell edges, so frames and text sit on the grid even
 		// when the panel size isn't a multiple of the cell count.
-		x0, y0 := math.Round(float64(wg.X)*cw), math.Round(float64(wg.Y)*ch)
-		x1, y1 := math.Round(float64(wg.X+wg.W)*cw), math.Round(float64(wg.Y+wg.H)*ch)
-		r := rect{X: x0, Y: y0, W: x1 - x0, H: y1 - y0}
-		clip := image.Rect(int(x0), int(y0), int(x1), int(y1)).Inset(frameGap/2 + 2)
-		c := &ctx{dc: dc, states: states, now: now, opts: wg.Options, clip: clip}
-		if c.boolOpt("border", true) {
+		x0, y0 := int(math.Round(float64(wg.X)*cw)), int(math.Round(float64(wg.Y)*ch))
+		x1, y1 := int(math.Round(float64(wg.X+wg.W)*cw)), int(math.Round(float64(wg.Y+wg.H)*ch))
+		r := R{x0, y0, x1 - x0, y1 - y0}
+		c := &ctx{dc: dc, states: states, now: now, opts: wg.Options,
+			clip: image.Rect(x0, y0, x1, y1).Inset(frameGap/2 + 2), ink: color.Gray{0}}
+		alert := k.alert != nil && k.alert(c)
+		if frames {
 			drawFrame(dc, r)
 		}
+		if alert {
+			// Inverted: the widget asks for action (D-015).
+			dc.SetRGB(0, 0, 0)
+			dc.DrawRoundedRectangle(float64(r.X)+4, float64(r.Y)+4, float64(r.W)-8, float64(r.H)-8, 8)
+			dc.Fill()
+			c.ink = color.Gray{255}
+		}
 		dc.Push()
-		dc.DrawRectangle(r.X, r.Y, r.W, r.H)
+		dc.DrawRectangle(float64(r.X), float64(r.Y), float64(r.W), float64(r.H))
 		dc.Clip()
-		k.render(c, r.inset(framePad))
+		k.render(c, content(r))
 		dc.ResetClip()
 		dc.Pop()
+		drawn = append(drawn, placed{r, alert})
+	}
+	if !frames {
+		// Column rules in the gutters, stopping short of crossings, as in print.
+		ink := &ctx{dc: dc, clip: image.Rect(0, 0, w, h), ink: color.Gray{0}}
+		for _, p := range drawn {
+			if p.alert {
+				continue
+			}
+			if p.r.right() < w {
+				ink.vline(p.r.right()-1, p.r.Y+10, p.r.bottom()-10, 2)
+			}
+			if p.r.bottom() < h {
+				ink.hline(p.r.X+10, p.r.right()-10, p.r.bottom()-1, 2)
+			}
+		}
 	}
 
 	gray := image.NewGray(image.Rect(0, 0, w, h))

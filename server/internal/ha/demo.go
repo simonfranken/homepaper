@@ -29,7 +29,7 @@ func RunDemo(ctx context.Context, s *Store) {
 		e("binary_sensor.bathroom_window", "on", map[string]any{"friendly_name": "Bathroom window", "device_class": "window"}),
 		e("person.alex", "home", map[string]any{"friendly_name": "Alex"}),
 	})
-	s.SetForecast("weather.home", demoForecast(now))
+	s.SetForecast("weather.home", DemoForecast(now))
 	s.setConnected(true)
 
 	t := time.NewTicker(5 * time.Second)
@@ -74,9 +74,9 @@ func RunDemo(ctx context.Context, s *Store) {
 	}
 }
 
-// demoForecast is today and the next five days, matching the panel
+// DemoForecast is today and the next five days, matching the panel
 // mockups in docs/design.
-func demoForecast(now time.Time) []Forecast {
+func DemoForecast(now time.Time) []Forecast {
 	days := []struct {
 		cond   string
 		hi, lo float64

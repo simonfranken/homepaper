@@ -2,7 +2,7 @@
 
 homepaper has two surfaces: the **panel** (800 × 480, 1-bit) and the **web UI** where the user lays it out. Both follow one design language ([D-014](decisions.md#d-014)). The panel redesign is [D-015](decisions.md#d-015).
 
-**Status (2026-11-16):** the designs are agreed. Neither is implemented yet. The images in `design/` are mockups, not renderer output (see [Mockups](#mockups)).
+**Status (2026-11-16):** both designs are agreed. The panel design is implemented, and the renderer reproduces `design/hero-*.png` pixel for pixel (`TestGolden`). The web UI restyle is in progress.
 
 ## Shared language (D-014)
 
@@ -90,22 +90,12 @@ Frames instead of rules:
 
 ![Lucida 12–34 and Go Bold 44–96 at 1 bit](design/type.png)
 
-### What the renderer needs for this
+### Implementation
 
-New primitives in `internal/render`:
-- layout-level dividers (rules or frames)
-- inverted widgets (white text on black)
-- drawn triangles and arrows (Lucida has no ▲▼→)
-- the split number with a raised decimal
-- meters (brightness bars)
-- dotted 1 px row separators
-- the new state icons (door, window, lock, person, droplet, flame, bolt)
-
-Backend work:
-- The weather forecast needs the `weather.get_forecasts` service call with a response, which the HA client doesn't do yet. Until it does, the weather widget draws without the strip.
+The renderer draws all of this (`internal/render/kinds.go`, `draw.go`; see [rendering.md](rendering.md#panel-design-d-015)). The forecast comes from `weather.get_forecasts`, which the HA client fetches ([D-015](decisions.md#d-015)).
 
 ## Mockups
 
-The PNGs in `design/` are true 800 × 480 1-bit images with demo data from `internal/ha/demo.go` (plus an invented forecast). They were drawn with the generator in `design/panelmock/` (its own Go module; `cd docs/design/panelmock && go run .` rewrites the PNGs), which uses the renderer's fonts and pipeline (bitmap and vector faces, whole-pixel text, threshold at 128), not with the renderer itself. Once D-015 is implemented, the renderer's output for the same layouts should match them closely. They make good reference images for tests.
+The PNGs in `design/` are true 800 × 480 1-bit images with demo data from `internal/ha/demo.go` (plus an invented forecast). They were drawn with the generator in `design/panelmock/` (its own Go module; `cd docs/design/panelmock && go run .` rewrites the PNGs), which uses the renderer's fonts and pipeline (bitmap and vector faces, whole-pixel text, threshold at 128). The renderer now draws `hero-*.png` identically, and `TestGolden` owns those three images. The other images (specimens, exceptions, type) are still mockup-only. Delete `panelmock/` once nothing needs those images any more.
 
 The web UI design exists as a design canvas only. There are no images of it in the repo.

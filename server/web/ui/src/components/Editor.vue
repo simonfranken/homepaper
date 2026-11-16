@@ -170,6 +170,18 @@ const redo = () => restore(redoStack.value, undoStack.value)
 
 // ---- Moving and resizing -------------------------------------------------
 const dragging = ref(false)
+// grid-layout-plus only emits moved/resized when the position changed, so a
+// widget dropped where it started would leave the grid showing. Releasing
+// the pointer always ends the drag.
+const endDrag = () => (dragging.value = false)
+onMounted(() => {
+  window.addEventListener('pointerup', endDrag)
+  window.addEventListener('pointercancel', endDrag)
+})
+onUnmounted(() => {
+  window.removeEventListener('pointerup', endDrag)
+  window.removeEventListener('pointercancel', endDrag)
+})
 
 function onLayoutUpdated() {
   const moved = gridItems.value.filter((it) => {

@@ -31,11 +31,11 @@ Two components ([D-002](decisions.md#d-002)):
 
 | Module | Responsibility |
 |---|---|
-| **HA client** | Connects to Home Assistant's WebSocket API, subscribes to the entities that layouts use, keeps a local state store current ([P-006](decisions.md#p-006)). URL and token are entered in the web UI, with `HA_URL`/`HA_TOKEN` as a fallback ([D-013](decisions.md#d-013)). Planned: `HA_URL`/`HA_TOKEN` from the environment only, as one global connection, and login only via Home Assistant ([D-016](decisions.md#d-016)). `ha.Manager` swaps the source (demo or HA) at runtime. |
+| **HA client** | Connects to Home Assistant's WebSocket API, subscribes to the entities that layouts use, keeps a local state store current ([P-006](decisions.md#p-006)). One global connection from `HA_URL`/`HA_TOKEN` (ideally a non-admin HA user), used for all displays ([D-016](decisions.md#d-016)). Without `HA_URL` (only with `HOMEPAPER_AUTH=off`) it shows demo entities. `ha.Manager` swaps the source (demo or HA) at runtime. |
 | **Storage** | Saves devices, their layouts, widget instances and their entity bindings. |
 | **Renderer** | Turns layout + widget configs + current states into a bitmap for the device's panel (resolution, color depth, packing). See [rendering.md](rendering.md). |
 | **Device hub** | Accepts device WebSocket connections, authenticates them, sends full and partial frames, decides when to send (diffing, rate limiting, full-refresh cadence). See [device-protocol.md](device-protocol.md). |
-| **Web UI** | Layout editor: place widgets on a grid, pick widget kinds, bind entities. The preview is the server-rendered frame (PNG, updated live) with the editable grid laid over it, and the UI never draws widgets itself. |
+| **Web UI** | Layout editor: place widgets on a grid, pick widget kinds, bind entities. Only reachable after logging in with a Home Assistant user ([D-016](decisions.md#d-016), [D-017](decisions.md#d-017)). The preview is the server-rendered frame (PNG, updated live) with the editable grid laid over it, and the UI never draws widgets itself. |
 | **Debug endpoints** | Rendered frames as PNG for the preview and troubleshooting. |
 
 ### 2. Device (ESP32)
@@ -70,11 +70,11 @@ server/
 ├── cmd/homepaper/        main: config from env, wiring
 ├── cmd/fakedevice/       protocol test client (acts like the firmware)
 ├── internal/ha/          state store, HA WebSocket client, demo source, Manager (switches source at runtime)
-├── internal/store/       devices, layouts, saved HA settings (JSON file)
+├── internal/store/       devices and layouts (JSON file)
 ├── internal/render/      widgets, icons, fonts → frame.Bitmap
 ├── internal/frame/       1bpp bitmap, region diff, wire encoding (+ tests)
 ├── internal/devicehub/   device WebSocket: auth, sessions, diff/rate limit, acks
-├── internal/api/         REST API, HA settings (settings.go), UI event WebSocket, basic auth, fonts, SPA serving
+├── internal/api/         REST API, login via Home Assistant (auth.go), UI event WebSocket, fonts, SPA serving
 └── web/                  embed.go + dist/ (build output) + ui/ (Vue 3 source)
 
 firmware/src/

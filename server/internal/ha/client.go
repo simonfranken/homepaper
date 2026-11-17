@@ -61,19 +61,6 @@ func NormalizeURL(raw string) (string, error) {
 	return strings.TrimRight(u.String(), "/"), nil
 }
 
-// SameTarget reports whether b points at the same host and port as a, over
-// a connection at least as secure. A saved token may be reused for b only
-// then: never for another host, and never downgraded from https to http.
-func SameTarget(a, b string) bool {
-	ua, errA := url.Parse(a)
-	ub, errB := url.Parse(b)
-	if errA != nil || errB != nil || ua.Host == "" || !strings.EqualFold(ua.Host, ub.Host) {
-		return false
-	}
-	secure := func(s string) bool { return s == "https" || s == "wss" }
-	return !secure(ua.Scheme) || secure(ub.Scheme)
-}
-
 // dialReason turns a dial error into a short explanation for the UI.
 func dialReason(err error) string {
 	var dnsErr *net.DNSError
@@ -98,19 +85,6 @@ func dialReason(err error) string {
 
 // ErrAuth means Home Assistant was reached but refused the token.
 var ErrAuth = errors.New("Home Assistant rejected the access token")
-
-// Test connects and authenticates once, without touching any store. It
-// tells apart "cannot reach" from "token rejected".
-func Test(ctx context.Context, baseURL, token string) error {
-	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	defer cancel()
-	conn, err := (&Client{URL: baseURL, Token: token}).dial(ctx)
-	if err != nil {
-		return err
-	}
-	conn.Close(websocket.StatusNormalClosure, "")
-	return nil
-}
 
 // dial opens the WebSocket and completes authentication.
 func (c *Client) dial(ctx context.Context) (*websocket.Conn, error) {

@@ -1,10 +1,9 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
-import { ago, api, hasConnected, subscribe, type Device, type Entity, type ServerStatus, type WidgetKind } from './api'
+import { ago, api, hasConnected, logout, subscribe, type Device, type Entity, type Me, type ServerStatus, type WidgetKind } from './api'
 import AddDisplay from './components/AddDisplay.vue'
 import DeviceView from './components/DeviceView.vue'
 import Editor from './components/Editor.vue'
-import HaSettings from './components/HaSettings.vue'
 import Icon from './components/Icon.vue'
 
 type View = 'layout' | 'display'
@@ -20,7 +19,7 @@ const loaded = ref(false)
 const serverLost = ref(false)
 const loadError = ref('')
 const adding = ref(false)
-const haOpen = ref(false)
+const me = ref<Me>()
 
 const selected = computed(() => devices.value.find((d) => d.id === selectedId.value))
 
@@ -54,7 +53,7 @@ async function loadSource() {
 
 async function loadAll() {
   try {
-    ;[kinds.value] = await Promise.all([api.widgets(), loadSource(), loadDevices()])
+    ;[kinds.value, me.value] = await Promise.all([api.widgets(), api.me(), loadSource(), loadDevices()])
     loadError.value = ''
     loaded.value = true
     previewVersion.value++
@@ -79,7 +78,6 @@ onMounted(() => {
       if (e.type === 'devices') quietly(loadDevices())
       else if (e.type === 'device') quietly(refreshDevice(e.device))
       else if (e.type === 'render' && e.device === selectedId.value) previewVersion.value++
-      else if (e.type === 'settings') onSourceChanged()
     },
     () => {
       serverLost.value = false
@@ -96,10 +94,12 @@ onUnmounted(() => {
   window.removeEventListener('hashchange', readHash)
 })
 
-// After the Home Assistant connection changed, entities arrive a moment later.
-function onSourceChanged() {
-  for (const ms of [0, 1500, 4000])
-    setTimeout(() => quietly(loadSource().then(() => previewVersion.value++)), ms)
+// Stop the event stream and timers first, so nothing reaches the closed API
+// and starts a new login on the way out.
+async function signOut() {
+  stop?.()
+  clearInterval(entityTimer)
+  await logout()
 }
 
 function onCreated(d: Device) {
@@ -140,9 +140,9 @@ function stateWord(d: Device) {
 const ha = computed(() => {
   const s = status.value
   if (!s) return undefined
-  if (s.source === 'demo') return { cls: 'demo', text: 'Demo data', action: 'Connect Home Assistant', count: '' }
-  if (s.connected) return { cls: 'ok', text: 'Home Assistant', action: '', count: `${s.entities} entities` }
-  return { cls: 'bad', text: 'Home Assistant unreachable', action: '', count: '' }
+  if (s.source === 'demo') return { cls: 'demo', text: 'Demo data', count: '', title: 'No HA_URL set: showing demo entities' }
+  if (s.connected) return { cls: 'ok', text: 'Home Assistant', count: `${s.entities} entities`, title: 'Connected to Home Assistant' }
+  return { cls: 'bad', text: 'Home Assistant unreachable', count: '', title: s.error || 'Not connected' }
 })
 </script>
 
@@ -175,12 +175,15 @@ const ha = computed(() => {
           Add display
         </button>
       </nav>
-      <button v-if="ha" class="quiet small ha" :class="{ bad: ha.cls === 'bad' }" title="Home Assistant connection" @click="haOpen = true">
+      <p v-if="ha" class="ha" :class="{ bad: ha.cls === 'bad' }" :title="ha.title" role="status">
         <span class="dot" :class="ha.cls"></span>
         <span>{{ ha.text }}</span>
         <span v-if="ha.count" class="count">{{ ha.count }}</span>
-        <span v-if="ha.action" class="ha-action">{{ ha.action }}</span>
-      </button>
+      </p>
+      <form v-if="me?.auth" class="who" method="post" action="/auth/logout" @submit.prevent="signOut">
+        <span class="user" :title="me.admin ? 'Home Assistant administrator' : 'Home Assistant user'">{{ me.name }}</span>
+        <button type="submit" class="quiet small">Log out</button>
+      </form>
     </header>
     <p v-if="serverLost && loaded" class="banner lost" role="status">
       <span><span class="spin"></span> Lost the connection to the homepaper server. Trying again…</span>
@@ -236,7 +239,6 @@ const ha = computed(() => {
       </div>
     </main>
     <AddDisplay v-if="adding" :existing="devices.map((d) => d.id)" @close="adding = false" @created="onCreated" />
-    <HaSettings v-if="haOpen" @close="haOpen = false" @changed="onSourceChanged" />
   </div>
 </template>
 
@@ -323,10 +325,30 @@ h1 {
   color: var(--muted);
 }
 
-.ha-action {
-  color: var(--blue);
-  text-decoration: underline;
-  text-underline-offset: 3px;
+.ha {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--t12);
+  font-weight: 500;
+}
+
+.who {
+  flex: none;
+  align-self: center;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding-left: 16px;
+  border-left: 2px dotted var(--ink);
+}
+
+.user {
+  font-weight: 700;
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .banner {

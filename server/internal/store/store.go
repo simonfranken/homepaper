@@ -73,7 +73,8 @@ var idPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,31}$`)
 // digits, dashes; max 32 chars).
 func ValidID(id string) bool { return idPattern.MatchString(id) }
 
-// HASettings is the Home Assistant connection as saved from the UI (D-013).
+// HASettings is a Home Assistant connection saved from the web UI before
+// D-016. It is only read, to warn that it is no longer used.
 // An empty URL means nothing is saved.
 type HASettings struct {
 	URL   string `json:"url"`
@@ -176,19 +177,6 @@ func (s *Store) HA() HASettings {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.ha
-}
-
-// SetHA saves the Home Assistant settings; a zero value clears them.
-func (s *Store) SetHA(h HASettings) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	old := s.ha
-	s.ha = h
-	if err := s.save(); err != nil {
-		s.ha = old
-		return err
-	}
-	return nil
 }
 
 // Create adds a device with a fresh token and the given starting layout.

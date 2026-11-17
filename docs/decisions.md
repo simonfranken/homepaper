@@ -24,10 +24,11 @@ When an item changes status, update it here (status, date, rationale) and in the
 | [D-010](#d-010) | Frontend: Vue 3 + TypeScript, embedded in the Go binary | Decided |
 | [D-011](#d-011) | Renderer: native Go, server-rendered preview | Decided |
 | [D-012](#d-012) | Firmware: Rust + esp-idf-svc | Decided |
-| [D-013](#d-013) | ~~HA URL and token configured in the web UI~~ | Implemented, superseded by D-016 (once D-016 is built) |
+| [D-013](#d-013) | ~~HA URL and token configured in the web UI~~ | Superseded by D-016 |
 | [D-014](#d-014) | One design language for web UI and panel | Decided, implemented |
 | [D-015](#d-015) | Panel redesign: widgets, rules, inversion | Decided, implemented |
-| [D-016](#d-016) | Login only via Home Assistant; one global HA connection from the environment | Decided, not implemented |
+| [D-016](#d-016) | Login only via Home Assistant; one global HA connection from the environment | Decided, implemented |
+| [D-017](#d-017) | Login details: shared displays, admins only by default, auth off only for development | Decided, implemented |
 | [P-001](#p-001) | ~~Server stack: TypeScript / Node~~ | Superseded by D-009, D-010 |
 | [P-002](#p-002) | ~~Renderer: Satori + resvg~~ | Superseded by D-011 |
 | [P-003](#p-003) | Layout model: snap grid (e.g. 8×6) | Proposed |
@@ -39,8 +40,8 @@ When an item changes status, update it here (status, date, rationale) and in the
 | [P-009](#p-009) | Frame format and protocol v1 as implemented | Proposed |
 | [P-010](#p-010) | Device setup: SoftAP portal, settings in NVS | Proposed |
 | [P-011](#p-011) | Server storage: one JSON file | Proposed |
-| [P-012](#p-012) | ~~Web UI auth: none by default, optional basic auth~~ | Superseded by D-016 (once built) |
-| [P-014](#p-014) | Login details: shared displays, admins only by default, auth off only for development | Proposed |
+| [P-012](#p-012) | ~~Web UI auth: none by default, optional basic auth~~ | Superseded by D-016 |
+| [P-014](#p-014) | ~~Login details~~ | Decided as D-017 |
 | [P-013](#p-013) | Fonts: Lucida Sans bitmaps for small text, Go fonts for large | Proposed |
 | [O-001](#o-001) | ~~Hardware route~~ | Answered by P-008 |
 | [O-002](#o-002) | ~~Is an ESP32-S3 dev board on hand?~~ | Answered: yes |
@@ -95,7 +96,7 @@ When an item changes status, update it here (status, date, rationale) and in the
 - Rejected for now: `esp-hal` + Embassy without ESP-IDF (leaner, but more work for networking and TLS), and Arduino + GxEPD2 (superseded P-005).
 
 ### D-013
-**Home Assistant URL and token are configured in the web UI** (2026-11-10). The project owner's goal: the user enters the HA URL and long-lived token in the UI, without editing files or environment variables. **Implemented 2026-11-11** as the Home Assistant dialog in the header (`PUT /api/settings/ha`):
+**~~Home Assistant URL and token are configured in the web UI~~** (superseded by [D-016](#d-016) on 2026-11-17) (2026-11-10). The project owner's goal: the user enters the HA URL and long-lived token in the UI, without editing files or environment variables. **Implemented 2026-11-11** as the Home Assistant dialog in the header (`PUT /api/settings/ha`):
 - The server tests the connection before saving and tells "can't reach" apart from "token rejected".
 - Settings are saved in `homepaper.json` (key `home_assistant`) and the source switches without a restart.
 - The token is never sent back to the browser. An empty token field keeps the saved token, but only for the same host and port, and never from `https` down to `http`. Otherwise anyone who can open the UI could have the server send the token to an address of their choice.
@@ -134,7 +135,19 @@ Built on the 8 × 6 grid, which is still [P-003](#p-003). Details and mockups in
 - **No privilege escalation through homepaper:** the global token should belong to a dedicated **non-admin** HA user. The server only reads states and fetches forecasts, and never forwards service calls or other HA requests on a user's behalf. After login it only asks HA who the user is, then revokes the login token and keeps its own session cookie; it stores no per-user HA tokens.
 - **Consequences:** the "Connect Home Assistant" dialog and `PUT /api/settings/ha` go away, superseding [D-013](#d-013) (no one with UI access can repoint the server's HA connection any more). `HOMEPAPER_PASSWORD` basic auth ([P-012](#p-012)) is replaced. The display WebSocket keeps its device tokens. TLS comes from a reverse proxy in front.
 
-Not implemented yet; until it is, D-013 and P-012 describe the running code. The open details are [P-014](#p-014).
+**Implemented 2026-11-17** (`internal/api/auth.go`, `internal/ha/user.go`):
+- `/auth/login` redirects to HA's `/auth/authorize` with a random `state` in a short-lived cookie.
+- `/auth/callback` checks the state, trades the code at HA's `/auth/token`, asks `auth/current_user` over the WebSocket, then revokes the refresh token (`/auth/revoke`, falling back to `action=revoke` on `/auth/token`).
+- The session is an HMAC-signed cookie (HttpOnly, SameSite=Lax, Secure behind HTTPS) with the user's ID, name and admin flag. It lasts 14 days, and the key is `session.key` in the data directory.
+- A session can't be revoked on the server: a user removed from HA keeps access until the cookie expires, unless `session.key` is deleted, which logs everyone out. That's accepted for a home server.
+- The client ID is homepaper's public URL (`HOMEPAPER_URL`, else taken from the request and proxy headers). The browser reaches HA at `HA_PUBLIC_URL` (default `HA_URL`).
+- A connection saved in `homepaper.json` by D-013 is ignored, with a warning in the log. `HOMEPAPER_PASSWORD` is ignored with a warning. Details in [D-017](#d-017).
+
+### D-017
+**Login details for [D-016](#d-016)** (2026-11-17, proposed as P-014, confirmed by the project owner):
+- **Displays are shared:** everyone allowed to log in sees and edits all displays. There is no per-user ownership.
+- **Who may log in:** `HOMEPAPER_LOGIN=admins` (default: HA administrators and the owner) or `users` (every HA user). Others get a "No access" page; their HA login is revoked too.
+- **Development and demo:** `HOMEPAPER_AUTH=off` turns the login off, with a warning in the log. Only then may `HA_URL` be empty, which shows demo entities (`make demo`). With the login on, the server refuses to start without `HA_URL` and `HA_TOKEN`.
 
 ## Proposed
 
@@ -181,7 +194,7 @@ The Wi-Fi password and token are never shown in the form; an empty field keeps t
 **Server storage: a single JSON file** (`$HOMEPAPER_DATA/homepaper.json`, written atomically). It's enough for a handful of devices and layouts. Revisit if history or many users are needed.
 
 ### P-012
-**Web UI authentication: none by default**, meant for a trusted LAN. Setting `HOMEPAPER_PASSWORD` turns on HTTP basic auth for the UI and API. The device WebSocket always authenticates with device tokens. An HA add-on with ingress would replace this ([O-004](#o-004)). Without a password, anyone on the LAN can also change the Home Assistant connection (`PUT /api/settings/ha`); the server tests a new address before saving, but the request itself is unauthenticated.
+**~~Web UI authentication: none by default~~** (superseded by [D-016](#d-016) on 2026-11-17), meant for a trusted LAN. Setting `HOMEPAPER_PASSWORD` turns on HTTP basic auth for the UI and API. The device WebSocket always authenticates with device tokens. An HA add-on with ingress would replace this ([O-004](#o-004)). Without a password, anyone on the LAN can also change the Home Assistant connection (`PUT /api/settings/ha`); the server tests a new address before saving, but the request itself is unauthenticated.
 
 ### P-013
 **Fonts: Lucida Sans bitmap fonts up to 25 px (and at 34 px), the Go fonts above** (2026-11-11, replacing "Go fonts, thresholded"). This carries out the bitmap-font plan from [D-011](#d-011).
@@ -192,10 +205,7 @@ The Wi-Fi password and token are never shown in the form; an empty field keeps t
 - Alternatives that were considered: Helvetica bitmaps (too light), Spleen and Terminus (monospace), and TRMNL-style pixel fonts.
 
 ### P-014
-**Login details for [D-016](#d-016)** (proposed 2026-11-17, not yet confirmed):
-- **Displays are shared:** everyone allowed to log in sees and edits all displays. Per-user ownership is not planned.
-- **Who may log in:** `HOMEPAPER_LOGIN=admins` (default, HA administrators only) or `users` (every HA user).
-- **Development and demo:** `HOMEPAPER_AUTH=off` turns the login off, with a warning in the log, so the server runs without a reachable HA.
+**~~Login details~~.** Decided on 2026-11-17 as [D-017](#d-017).
 
 ## Open
 

@@ -27,7 +27,8 @@ homepaper is an e-ink smart home dashboard. A self-hosted server connects to Hom
 Server (run in `server/`):
 
 ```sh
-make run          # build UI + server, run on :8080 (reads server/.env; demo data if HA_URL is empty)
+make run          # build UI + server, run on :8080 with HA from server/.env and the login via HA
+make demo         # same with demo entities and no login (HOMEPAPER_AUTH=off)
 make test         # go vet, go test, vue-tsc
 make fakedevice   # build bin/fakedevice, a protocol test client
 make docker       # build the Docker image
@@ -51,6 +52,7 @@ espflash flash --monitor target/xtensa-esp32s3-espidf/release/homepaper-fw   # n
 - `ws.rs` uses the C `esp_websocket_client` API directly because the safe wrapper can't reassemble fragmented messages. A 48 KB frame arrives in many chunks. Buffers are allocated once at boot and must never grow.
 - The BDF files in `server/internal/render/fonts/lucida/` must stay byte-for-byte unmodified (their license). Don't subset, convert or patch them; handle missing glyphs in code (`bitmapFace` falls back to the Go font).
 - In `server/`, `coder/websocket` has a 32 KB default read limit. The HA client raises it, because `get_states` responses are large.
+- The web UI and API are behind the login via Home Assistant (D-016, `internal/api/auth.go`). Only `/ws/device` (device tokens) and `/auth/*` are outside it. homepaper must never act on HA on a user's behalf: it keeps no user tokens, only reads states with the global `HA_TOKEN`.
 - When killing the dev server, use `pkill -x homepaper`, not `pkill -f bin/homepaper`, which also matches your own shell.
 - HA's WebSocket API rejects message IDs that don't increase within a connection ("Identifier values have to increase"). In `ha.Client.session` every request takes its ID from the `send` counter, and only that goroutine writes. Send new requests through it. `internal/ha/client_test.go` fails on a reused ID.
 
@@ -58,4 +60,4 @@ espflash flash --monitor target/xtensa-esp32s3-espidf/release/homepaper-fw   # n
 
 - In docs and UI text, refer to people using homepaper as "the user" or "they".
 - Keep the device side simple. Rendering, layout, diffing and rate limiting belong on the server.
-- Don't put secrets (HA tokens, Wi-Fi credentials, device tokens) in the repo. Use `.env` (gitignored) and `.env.template`. HA settings are entered in the web UI and saved in `homepaper.json` (D-013); `HA_URL`/`HA_TOKEN` in `server/.env` are only a fallback.
+- Don't put secrets (HA tokens, Wi-Fi credentials, device tokens) in the repo. Use `.env` (gitignored) and `.env.template`. The HA connection comes only from `HA_URL`/`HA_TOKEN` (D-016); nothing in the UI can change it.

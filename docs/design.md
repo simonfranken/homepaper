@@ -30,7 +30,7 @@ The panel's constraints set the rules, and the web UI borrows the panel's number
 
 The structure stays as built (header with display tabs, Layout/Display switch, editor with inspector, dialogs). The design defines the look and adds these details:
 
-- **Header:** display tabs with status dots, "Add display", and the Home Assistant button in three states (demo with "Connect Home Assistant", connected with the entity count, unreachable).
+- **Header:** display tabs with status dots, "Add display", the Home Assistant status in three states (demo, connected with the entity count, unreachable; not clickable since [D-016](decisions.md#d-016)), and the logged-in user with "Log out".
 - **Layout view:**
   - The preview sits in a black bezel (a picture frame), with the 8 × 6 grid as blue guides while a widget is moved or resized.
   - Widgets get blue kind tags. The selected one has a blue outline and a resize handle.
@@ -46,7 +46,7 @@ The structure stays as built (header with display tabs, Layout/Display switch, e
 - **Dividers:** a Rules/Frames switch in the editor toolbar sets the layout's dividers ([D-015](decisions.md#d-015)). The design canvas had no place for it; the toolbar is the implementation's choice.
 - **Light only:** the old editor followed the system's dark mode. The design is ink on paper and has no dark variant, so the restyled UI is light only.
 - **Display tab:** numbered setup steps, the values to enter by hand (with Copy and Show), a status card with details, and Manage (rename, replace token, delete) with inline confirmation.
-- **Dialogs:** Add display, and Home Assistant (first connection, saved, from environment, token rejected, can't reach).
+- **Dialogs:** Add display. The Home Assistant dialog of the canvas was dropped with [D-016](decisions.md#d-016). The login pages (logged out, no access, login failed) use the same card and hard shadow.
 
 ## Panel (D-015)
 

@@ -4,7 +4,6 @@ package api
 
 import (
 	"bytes"
-	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -28,12 +27,14 @@ type API struct {
 	Hub      *devicehub.Hub
 	Log      *slog.Logger
 	Web      fs.FS // built frontend (may lack index.html in dev)
-	Password string
 	Location *time.Location
-	// HA switches the entity source at runtime. EnvHA is the connection
-	// from HA_URL/HA_TOKEN, used while nothing is saved in the UI (D-013).
-	HA    *ha.Manager
-	EnvHA store.HASettings
+	// HA runs the entity source: the one global Home Assistant connection
+	// from HA_URL/HA_TOKEN, or demo entities without HA_URL (D-016).
+	HA             *ha.Manager
+	HAURL, HAToken string
+	// Auth is the login via Home Assistant; nil turns it off
+	// (HOMEPAPER_AUTH=off, development and demo only).
+	Auth *Auth
 
 	events *broadcaster
 
@@ -48,7 +49,12 @@ func (a *API) Handler() http.Handler {
 	a.States.OnChange(a.onStates)
 
 	mux := http.NewServeMux()
+	// The display authenticates with its device token, not a login.
 	mux.Handle("GET /ws/device", a.Hub)
+	if a.Auth != nil {
+		a.Auth.routes(mux)
+		mux.HandleFunc("GET /auth/font/{name}", a.font) // for the login pages
+	}
 
 	api := http.NewServeMux()
 	api.HandleFunc("GET /api/status", a.status)
@@ -64,29 +70,37 @@ func (a *API) Handler() http.Handler {
 	api.HandleFunc("GET /api/devices/{id}/live", func(w http.ResponseWriter, r *http.Request) {
 		a.Hub.ServeViewer(w, r, r.PathValue("id"))
 	})
-	api.HandleFunc("GET /api/settings/ha", a.getHA)
-	api.HandleFunc("PUT /api/settings/ha", a.putHA)
+	api.HandleFunc("GET /api/me", a.me)
 	api.HandleFunc("GET /api/fonts/{name}", a.font)
 	api.HandleFunc("GET /api/events", a.events.serve)
 	api.Handle("/", a.frontend())
-	mux.Handle("/", a.auth(api))
+	if a.Auth != nil {
+		mux.Handle("/", a.Auth.require(api))
+	} else {
+		mux.Handle("/", api)
+	}
 	return mux
 }
 
-// auth applies HTTP basic auth to the UI and API when a password is set.
-// The device WebSocket authenticates with device tokens instead.
-func (a *API) auth(next http.Handler) http.Handler {
-	if a.Password == "" {
-		return next
+// StartHA starts the entity source: Home Assistant from HA_URL/HA_TOKEN,
+// or demo entities without them.
+func (a *API) StartHA() {
+	if a.HAURL == "" {
+		a.Log.Info("no HA_URL: showing demo entities")
+	} else {
+		a.Log.Info("home assistant", "url", a.HAURL)
 	}
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if _, p, ok := r.BasicAuth(); !ok || subtle.ConstantTimeCompare([]byte(p), []byte(a.Password)) != 1 {
-			w.Header().Set("WWW-Authenticate", `Basic realm="homepaper"`)
-			http.Error(w, "unauthorized", http.StatusUnauthorized)
-			return
-		}
-		next.ServeHTTP(w, r)
-	})
+	a.HA.Use(a.HAURL, a.HAToken)
+}
+
+// me tells the UI who is logged in.
+func (a *API) me(w http.ResponseWriter, r *http.Request) {
+	if a.Auth == nil {
+		writeJSON(w, http.StatusOK, map[string]any{"auth": false})
+		return
+	}
+	s, _ := a.Auth.user(r)
+	writeJSON(w, http.StatusOK, map[string]any{"auth": true, "name": s.Name, "admin": s.Admin})
 }
 
 func (a *API) frontend() http.Handler {

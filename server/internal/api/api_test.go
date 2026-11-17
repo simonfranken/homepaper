@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
-	"strings"
 	"testing"
 	"testing/fstest"
 	"time"
@@ -108,76 +107,6 @@ func waitFor(t *testing.T, what string, cond func() bool) {
 	t.Fatalf("timed out waiting for %s", what)
 }
 
-func TestHASettings(t *testing.T) {
-	a, h := newTestAPI(t)
-	good := fakeHA(t, "secret")
-
-	code, out := call(t, h, "GET", "/api/settings/ha", nil)
-	if code != 200 || out["origin"] != "none" || out["has_token"] != false {
-		t.Fatalf("initial settings: %d %v", code, out)
-	}
-
-	// A wrong token is reported and nothing is saved.
-	code, out = call(t, h, "PUT", "/api/settings/ha", map[string]string{"url": good.URL, "token": "wrong"})
-	if code != 400 || !strings.Contains(out["error"].(string), "rejected") {
-		t.Fatalf("wrong token: %d %v", code, out)
-	}
-	if a.Store.HA().URL != "" {
-		t.Fatal("settings saved despite failed test")
-	}
-
-	// An unreachable address is reported as such.
-	code, out = call(t, h, "PUT", "/api/settings/ha", map[string]string{"url": "http://127.0.0.1:1", "token": "secret"})
-	if code != 400 || !strings.Contains(out["error"].(string), "cannot reach") {
-		t.Fatalf("unreachable: %d %v", code, out)
-	}
-
-	// The right token saves, never echoes the token, and switches the source.
-	code, out = call(t, h, "PUT", "/api/settings/ha", map[string]string{"url": good.URL + "/", "token": "secret"})
-	if code != 200 || out["origin"] != "ui" || out["has_token"] != true || out["url"] != good.URL {
-		t.Fatalf("save: %d %v", code, out)
-	}
-	if _, leaked := out["token"]; leaked {
-		t.Fatal("token returned to the browser")
-	}
-	waitFor(t, "entities from fake HA", func() bool { _, ok := a.States.Get("sensor.real"); return ok })
-	if st := a.States.Status(); st.Source != ha.SourceHA || !st.Connected {
-		t.Fatalf("status after save: %+v", st)
-	}
-
-	// An empty token keeps the saved one for the same host...
-	if code, out = call(t, h, "PUT", "/api/settings/ha", map[string]string{"url": good.URL}); code != 200 {
-		t.Fatalf("keep token: %d %v", code, out)
-	}
-	// ...but is never sent over a less secure connection...
-	httpsURL := strings.Replace(good.URL, "http://", "https://", 1)
-	if err := a.Store.SetHA(store.HASettings{URL: httpsURL, Token: "secret"}); err != nil {
-		t.Fatal(err)
-	}
-	code, out = call(t, h, "PUT", "/api/settings/ha", map[string]string{"url": good.URL})
-	if code != 400 || !strings.Contains(out["error"].(string), "again") {
-		t.Fatalf("token downgrade to http: %d %v", code, out)
-	}
-	if err := a.Store.SetHA(store.HASettings{URL: good.URL, Token: "secret"}); err != nil {
-		t.Fatal(err)
-	}
-	// ...or to another host.
-	other := fakeHA(t, "secret")
-	code, out = call(t, h, "PUT", "/api/settings/ha", map[string]string{"url": other.URL})
-	if code != 400 || !strings.Contains(out["error"].(string), "again") {
-		t.Fatalf("token reuse on other host: %d %v", code, out)
-	}
-
-	// Clearing the address goes back to demo data.
-	if code, out = call(t, h, "PUT", "/api/settings/ha", map[string]string{"url": ""}); code != 200 || out["origin"] != "none" {
-		t.Fatalf("clear: %d %v", code, out)
-	}
-	waitFor(t, "demo entities", func() bool { _, ok := a.States.Get("weather.home"); return ok })
-	if _, ok := a.States.Get("sensor.real"); ok {
-		t.Fatal("HA entity survived the switch to demo data")
-	}
-}
-
 func TestStarterLayoutKeepsOnlyBoundWidgets(t *testing.T) {
 	a, h := newTestAPI(t)
 	waitFor(t, "demo entities", func() bool { _, ok := a.States.Get("weather.home"); return ok })
@@ -192,9 +121,9 @@ func TestStarterLayoutKeepsOnlyBoundWidgets(t *testing.T) {
 	}
 
 	good := fakeHA(t, "secret")
-	if code, out = call(t, h, "PUT", "/api/settings/ha", map[string]string{"url": good.URL, "token": "secret"}); code != 200 {
-		t.Fatalf("save: %d %v", code, out)
-	}
+	a.HAURL, a.HAToken = good.URL, "secret"
+	a.StartHA()
+	waitFor(t, "entities from fake HA", func() bool { _, ok := a.States.Get("sensor.real"); return ok })
 	_, out = call(t, h, "POST", "/api/devices", map[string]string{"id": "real", "name": "Real"})
 	for _, w := range out["layout"].(map[string]any)["widgets"].([]any) {
 		kind := w.(map[string]any)["kind"]

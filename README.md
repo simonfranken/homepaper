@@ -29,16 +29,25 @@ The server, editor and firmware are built. The panel hasn't been bought yet, so 
 
 Requires Go ≥ 1.26 and Node ≥ 20.
 
+**Try it without Home Assistant** (demo entities, no login):
+
 ```sh
 cd server
-make run                 # builds the UI and server, runs with demo entities on :8080
+make demo                # builds the UI and server, runs on :8080 with HOMEPAPER_AUTH=off
 ```
 
-Open http://localhost:8080 and add a display. You can lay it out right away with demo data. The **Display** tab walks you through connecting the panel and links to its setup page with the server address, device ID and token filled in.
+Open http://localhost:8080 and add a display. The **Display** tab walks you through connecting the panel and links to its setup page with the server address, device ID and token filled in.
 
-To use your Home Assistant, create a long-lived access token (HA profile → Security → Long-lived access tokens) and click **Connect Home Assistant** in the header. The server tests the connection, saves it in `homepaper.json` and switches over without a restart. The token is never shown again.
+**With your Home Assistant:**
 
-For headless setups, `HA_URL` and `HA_TOKEN` also work, from the environment or from `.env` in the working directory (`cp .env.template .env`). Settings saved in the UI take precedence over them; remove the connection in the UI to use the environment again ([D-013](docs/decisions.md#d-013)).
+1. In Home Assistant, create a user for homepaper (Settings → People → Users). Make it a **regular user, not an administrator**: homepaper only reads states, and that's all the token can do.
+2. Log in to Home Assistant as that user and create a long-lived access token (your profile → Security → Long-lived access tokens).
+3. Set `HA_URL` and `HA_TOKEN` (`cp server/.env.template server/.env`, or the environment), then `make run`.
+4. Open homepaper. It sends you to Home Assistant's login page; after logging in you're back in the editor.
+
+**Login ([D-016](docs/decisions.md#d-016)):** homepaper has no accounts of its own. You log in with your Home Assistant user, by default only Home Assistant administrators (`HOMEPAPER_LOGIN=users` lets every HA user in). homepaper only asks HA who you are, ends that HA login right away and keeps its own session cookie for 14 days. All displays are shared by everyone who may log in. The display itself connects with its device token, not a login.
+
+**Behind a reverse proxy:** put homepaper behind your proxy for HTTPS, pass `/ws/device` through as a WebSocket, and set `HOMEPAPER_URL` to the address you open it at. Without it, homepaper takes the address from the `Host` and `X-Forwarded-Proto`/`-Host` headers. If the browser reaches Home Assistant at another address than the server does (e.g. the server uses a Docker-internal name), set `HA_PUBLIC_URL` to the browser's one.
 
 Or with Docker:
 
@@ -51,11 +60,14 @@ docker run -d -p 8080:8080 -v homepaper-data:/data --env-file .env homepaper
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `HA_URL`, `HA_TOKEN` | unset | Fallback Home Assistant connection, used while none is saved in the UI. Without either, **demo mode** is used. |
+| `HA_URL`, `HA_TOKEN` | unset | The Home Assistant connection (required unless `HOMEPAPER_AUTH=off`). Use a token of a non-admin HA user. |
+| `HA_PUBLIC_URL` | `HA_URL` | Home Assistant's address as the browser reaches it, for the login redirect |
+| `HOMEPAPER_URL` | from the request | homepaper's address as the browser reaches it, e.g. `https://homepaper.example.org` |
+| `HOMEPAPER_LOGIN` | `admins` | Who may log in: `admins` (HA administrators and the owner) or `users` (every HA user) |
+| `HOMEPAPER_AUTH` | `on` | `off` turns the login off and, without `HA_URL`, shows demo entities. **Development and demos only.** |
 | `HOMEPAPER_ENV_FILE` | `.env` | File to load the settings in this table from |
 | `HOMEPAPER_LISTEN` | `:8080` | Listen address |
-| `HOMEPAPER_DATA` | `data` (`/data` in Docker) | Directory for `homepaper.json` |
-| `HOMEPAPER_PASSWORD` | unset | Turns on HTTP basic auth for the UI and API (any username). Without it, anyone on the network can edit layouts and the HA connection. |
+| `HOMEPAPER_DATA` | `data` (`/data` in Docker) | Directory for `homepaper.json` and `session.key` (signs logins; delete it to log everyone out) |
 | `HOMEPAPER_MIN_INTERVAL` | `3s` | Minimum time between frames to one device |
 | `HOMEPAPER_FULL_REFRESH_EVERY` | `20` | Partial updates before a forced full refresh |
 | `TZ` | system | Timezone for clock widgets |

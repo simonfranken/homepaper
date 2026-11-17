@@ -1,4 +1,4 @@
-.PHONY: all web build run test fakedevice darwin docker clean
+.PHONY: all web build run demo test fakedevice darwin docker clean
 
 all: build
 
@@ -10,9 +10,14 @@ web:
 build: web
 	go build -o bin/homepaper ./cmd/homepaper
 
-# Run with demo data unless HA_URL/HA_TOKEN are set.
+# Run with Home Assistant (HA_URL/HA_TOKEN from .env or the environment) and
+# the login via HA.
 run: build
 	HOMEPAPER_DATA=data ./bin/homepaper
+
+# Run with demo entities and without a login (development only).
+demo: build
+	HOMEPAPER_DATA=data HOMEPAPER_AUTH=off HA_URL= HA_TOKEN= ./bin/homepaper
 
 test:
 	go vet ./...

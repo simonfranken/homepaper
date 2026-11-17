@@ -90,11 +90,28 @@ export interface ServerStatus {
   entities: number
 }
 
-export interface HaSettings {
-  url: string
-  has_token: boolean
-  origin: 'ui' | 'env' | 'none'
-  status: ServerStatus
+// Who is logged in. auth is false when the server runs with
+// HOMEPAPER_AUTH=off (development and demo).
+export interface Me {
+  auth: boolean
+  name?: string
+  admin?: boolean
+}
+
+// The login is via Home Assistant (D-016). When the session has expired,
+// any API call sends the browser back through the login, except while the
+// user is logging out (otherwise HA's own session would log them back in).
+let loggingOut = false
+
+export async function logout() {
+  loggingOut = true
+  await fetch('/auth/logout', { method: 'POST' }).catch(() => undefined)
+  location.replace('/auth/logged-out')
+}
+
+export function toLogin() {
+  if (loggingOut) return
+  location.href = '/auth/login?next=' + encodeURIComponent(location.pathname + location.search + location.hash)
 }
 
 async function req<T>(method: string, url: string, body?: unknown): Promise<T> {
@@ -103,6 +120,10 @@ async function req<T>(method: string, url: string, body?: unknown): Promise<T> {
     headers: body ? { 'Content-Type': 'application/json' } : undefined,
     body: body ? JSON.stringify(body) : undefined,
   })
+  if (res.status === 401) {
+    toLogin()
+    throw new Error('Login required')
+  }
   if (!res.ok) {
     let msg = res.statusText
     try {
@@ -126,8 +147,7 @@ export const api = {
   resetToken: (id: string) => req<Device>('PATCH', `/api/devices/${id}`, { reset_token: true }),
   deleteDevice: (id: string) => req<void>('DELETE', `/api/devices/${id}`),
   saveLayout: (id: string, layout: Layout) => req<Device>('PUT', `/api/devices/${id}/layout`, layout),
-  haSettings: () => req<HaSettings>('GET', '/api/settings/ha'),
-  saveHaSettings: (url: string, token: string) => req<HaSettings>('PUT', '/api/settings/ha', { url, token }),
+  me: () => req<Me>('GET', '/api/me'),
   previewUrl: (id: string, version: number | string) => `/api/devices/${id}/preview.png?v=${version}`,
 }
 
@@ -135,7 +155,6 @@ export type ServerEvent =
   | { type: 'device'; device: string }
   | { type: 'devices' }
   | { type: 'render'; device: string }
-  | { type: 'settings' }
 
 // Subscribes to server events, reconnecting with backoff. Returns a stop function.
 export function subscribe(

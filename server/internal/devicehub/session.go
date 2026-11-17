@@ -43,10 +43,11 @@ type session struct {
 	viewer bool
 }
 
-// status updates the device's status, unless this is a viewer.
+// status updates the device's status, unless this is a viewer or a session
+// that a newer connection of the device has replaced.
 func (s *session) status(fn func(st *Status)) {
 	if !s.viewer {
-		s.hub.updateStatus(s.deviceID, fn)
+		s.hub.updateStatusIf(s.deviceID, s, fn)
 	}
 }
 

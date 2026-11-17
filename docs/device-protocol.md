@@ -7,7 +7,7 @@ Status: **implemented** in `server/internal/devicehub`, `server/internal/frame` 
 - The device opens a **WebSocket** to its configured server URL, e.g. `ws://192.168.1.10:8080/ws/device` (or `wss://…` behind TLS) ([D-003](decisions.md#d-003)).
 - **Text messages** carry JSON. **Binary messages** carry frames.
 - The device reconnects on its own (the C client retries every 5 s). After each (re)connect it sends `hello` again, and the server always starts with a full frame.
-- A newer connection for the same device ID replaces the older one.
+- A newer connection for the same device ID replaces the older one. The server drops the old connection without a close handshake (after a device reset it is usually half-open), and only the newest connection sets the status the UI shows.
 
 ## Handshake
 

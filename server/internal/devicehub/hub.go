@@ -91,8 +91,16 @@ func (h *Hub) Status(id string) Status {
 	return Status{}
 }
 
-func (h *Hub) updateStatus(id string, fn func(s *Status)) {
+// updateStatusIf updates a device's status if sess is the device's current
+// session. A session that a reconnect replaced (e.g. the half-open
+// connection left behind by a device reset) must not touch the status of the
+// one that replaced it.
+func (h *Hub) updateStatusIf(id string, sess *session, fn func(s *Status)) {
 	h.mu.Lock()
+	if h.sessions[id] != sess {
+		h.mu.Unlock()
+		return
+	}
 	s, ok := h.status[id]
 	if !ok {
 		s = &Status{}
@@ -221,22 +229,29 @@ func (h *Hub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	s.refs.Store(ReferencedEntities(dev.Layout))
 
 	h.mu.Lock()
-	if old := h.sessions[dev.ID]; old != nil {
-		old.conn.Close(websocket.StatusGoingAway, "replaced by new connection")
-	}
+	old := h.sessions[dev.ID]
 	h.sessions[dev.ID] = s
 	h.mu.Unlock()
+	if old != nil {
+		// After a device reset the old connection is usually half-open, and a
+		// close handshake would wait for a peer that is gone.
+		h.Log.Info("device reconnected, closing its old connection", "device", dev.ID)
+		old.conn.CloseNow()
+	}
 	defer func() {
+		s.status(func(st *Status) { st.Connected = false })
 		h.mu.Lock()
-		if h.sessions[dev.ID] == s {
+		current := h.sessions[dev.ID] == s
+		if current {
 			delete(h.sessions, dev.ID)
 		}
 		h.mu.Unlock()
-		h.updateStatus(dev.ID, func(st *Status) { st.Connected = false })
-		h.Log.Info("device disconnected", "device", dev.ID)
+		if current {
+			h.Log.Info("device disconnected", "device", dev.ID)
+		}
 	}()
 
-	h.updateStatus(dev.ID, func(st *Status) {
+	s.status(func(st *Status) {
 		*st = Status{Connected: true, ConnectedAt: time.Now(), Remote: r.RemoteAddr, Firmware: hl.Firmware,
 			Panel: fmt.Sprintf("%s %dx%d %s", hl.Panel.Model, hl.Panel.Width, hl.Panel.Height, hl.Panel.Format)}
 	})

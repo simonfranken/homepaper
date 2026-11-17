@@ -56,6 +56,12 @@ cd server && make docker
 docker run -d -p 8080:8080 -v homepaper-data:/data --env-file .env homepaper
 ```
 
+GitHub Actions (`.github/workflows/docker.yml`) runs `make test` and builds the image for `linux/amd64` and `linux/arm64`. Pushes to `main` publish `ghcr.io/simonfranken/homepaper:latest` (plus a `sha-…` tag), and `v*` tags publish versioned images. Pull requests only build. To use the published image:
+
+```sh
+docker run -d -p 8080:8080 -v homepaper-data:/data --env-file .env ghcr.io/simonfranken/homepaper:latest
+```
+
 `.env` is never copied into the image; pass it at runtime as above.
 
 | Variable | Default | Meaning |

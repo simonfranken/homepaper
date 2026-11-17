@@ -24,9 +24,10 @@ When an item changes status, update it here (status, date, rationale) and in the
 | [D-010](#d-010) | Frontend: Vue 3 + TypeScript, embedded in the Go binary | Decided |
 | [D-011](#d-011) | Renderer: native Go, server-rendered preview | Decided |
 | [D-012](#d-012) | Firmware: Rust + esp-idf-svc | Decided |
-| [D-013](#d-013) | HA URL and token configured in the web UI | Decided, implemented |
+| [D-013](#d-013) | ~~HA URL and token configured in the web UI~~ | Implemented, superseded by D-016 (once D-016 is built) |
 | [D-014](#d-014) | One design language for web UI and panel | Decided, implemented |
 | [D-015](#d-015) | Panel redesign: widgets, rules, inversion | Decided, implemented |
+| [D-016](#d-016) | Login only via Home Assistant; one global HA connection from the environment | Decided, not implemented |
 | [P-001](#p-001) | ~~Server stack: TypeScript / Node~~ | Superseded by D-009, D-010 |
 | [P-002](#p-002) | ~~Renderer: Satori + resvg~~ | Superseded by D-011 |
 | [P-003](#p-003) | Layout model: snap grid (e.g. 8×6) | Proposed |
@@ -38,7 +39,8 @@ When an item changes status, update it here (status, date, rationale) and in the
 | [P-009](#p-009) | Frame format and protocol v1 as implemented | Proposed |
 | [P-010](#p-010) | Device setup: SoftAP portal, settings in NVS | Proposed |
 | [P-011](#p-011) | Server storage: one JSON file | Proposed |
-| [P-012](#p-012) | Web UI auth: none by default, optional basic auth | Proposed |
+| [P-012](#p-012) | ~~Web UI auth: none by default, optional basic auth~~ | Superseded by D-016 (once built) |
+| [P-014](#p-014) | Login details: shared displays, admins only by default, auth off only for development | Proposed |
 | [P-013](#p-013) | Fonts: Lucida Sans bitmaps for small text, Go fonts for large | Proposed |
 | [O-001](#o-001) | ~~Hardware route~~ | Answered by P-008 |
 | [O-002](#o-002) | ~~Is an ESP32-S3 dev board on hand?~~ | Answered: yes |
@@ -124,6 +126,16 @@ Confirmed by the project owner on 2026-11-16:
 
 Built on the 8 × 6 grid, which is still [P-003](#p-003). Details and mockups in [design.md](design.md#panel-d-015).
 
+### D-016
+**Login only via Home Assistant; one global HA connection from the environment** (2026-11-17). The project owner's decision:
+- **Login:** the web UI and API accept only a Home Assistant login, through HA's own OAuth2-style flow (`/auth/authorize`, `/auth/token`; the client ID is homepaper's URL, so nothing is registered in HA). There is no homepaper password and no other login. Rationale: whoever has no access to Home Assistant has no reason to use homepaper, and accounts and MFA stay in one place. homepaper is not packaged as an HA add-on or integration (Ingress, [O-004](#o-004), not pursued).
+- **HA address:** set with `HA_URL` in the environment when homepaper is set up.
+- **One global HA connection:** the server keeps a single connection with a long-lived token from `HA_TOKEN`, used to render all displays around the clock, whoever is logged in. Per-user tokens were rejected: displays would stop when their owner's token expires or the user is removed, and HA lets every user read every entity's state anyway, so per-user rendering would protect nothing.
+- **No privilege escalation through homepaper:** the global token should belong to a dedicated **non-admin** HA user. The server only reads states and fetches forecasts, and never forwards service calls or other HA requests on a user's behalf. After login it only asks HA who the user is, then revokes the login token and keeps its own session cookie; it stores no per-user HA tokens.
+- **Consequences:** the "Connect Home Assistant" dialog and `PUT /api/settings/ha` go away, superseding [D-013](#d-013) (no one with UI access can repoint the server's HA connection any more). `HOMEPAPER_PASSWORD` basic auth ([P-012](#p-012)) is replaced. The display WebSocket keeps its device tokens. TLS comes from a reverse proxy in front.
+
+Not implemented yet; until it is, D-013 and P-012 describe the running code. The open details are [P-014](#p-014).
+
 ## Proposed
 
 These are recommended defaults. The project owner hasn't confirmed them yet.
@@ -178,6 +190,12 @@ The Wi-Fi password and token are never shown in the form; an empty field keeps t
 - License: the files must stay **unmodified**, and their notice must appear in code comments and user documentation. It is in `server/internal/render/fonts.go`, the README and `fonts/lucida/COPYING`. The font's own "…" has only two dots, so shortened text ends in "...".
 - How text is sized: from a fixed scale (bitmap sizes, then whole vector pixel sizes from 26 px), placed on whole pixels and clipped to its widget. Labels are 17 px, step down to 14 px, then get shortened. Content shrinks to 12 px before it is shortened.
 - Alternatives that were considered: Helvetica bitmaps (too light), Spleen and Terminus (monospace), and TRMNL-style pixel fonts.
+
+### P-014
+**Login details for [D-016](#d-016)** (proposed 2026-11-17, not yet confirmed):
+- **Displays are shared:** everyone allowed to log in sees and edits all displays. Per-user ownership is not planned.
+- **Who may log in:** `HOMEPAPER_LOGIN=admins` (default, HA administrators only) or `users` (every HA user).
+- **Development and demo:** `HOMEPAPER_AUTH=off` turns the login off, with a warning in the log, so the server runs without a reachable HA.
 
 ## Open
 

@@ -31,7 +31,7 @@ Two components ([D-002](decisions.md#d-002)):
 
 | Module | Responsibility |
 |---|---|
-| **HA client** | Connects to Home Assistant's WebSocket API, subscribes to the entities that layouts use, keeps a local state store current ([P-006](decisions.md#p-006)). URL and token are entered in the web UI, with `HA_URL`/`HA_TOKEN` as a fallback ([D-013](decisions.md#d-013)). `ha.Manager` swaps the source (demo or HA) at runtime. |
+| **HA client** | Connects to Home Assistant's WebSocket API, subscribes to the entities that layouts use, keeps a local state store current ([P-006](decisions.md#p-006)). URL and token are entered in the web UI, with `HA_URL`/`HA_TOKEN` as a fallback ([D-013](decisions.md#d-013)). Planned: `HA_URL`/`HA_TOKEN` from the environment only, as one global connection, and login only via Home Assistant ([D-016](decisions.md#d-016)). `ha.Manager` swaps the source (demo or HA) at runtime. |
 | **Storage** | Saves devices, their layouts, widget instances and their entity bindings. |
 | **Renderer** | Turns layout + widget configs + current states into a bitmap for the device's panel (resolution, color depth, packing). See [rendering.md](rendering.md). |
 | **Device hub** | Accepts device WebSocket connections, authenticates them, sends full and partial frames, decides when to send (diffing, rate limiting, full-refresh cadence). See [device-protocol.md](device-protocol.md). |

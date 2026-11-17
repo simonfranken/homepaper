@@ -41,6 +41,13 @@ Next: flash the S3 and check the connection and setup on real hardware, then ord
 - Storage for devices and layouts.
 - **Done when** a layout built entirely in the UI appears on the panel.
 
+## M3b: login via Home Assistant ([D-016](decisions.md#d-016))
+
+- Log in to the web UI and API only through Home Assistant's OAuth2-style flow; a session cookie afterwards; the login token is revoked right after reading the user.
+- `HA_URL` and `HA_TOKEN` from the environment only, as one global connection; the HA settings dialog goes away.
+- The details in [P-014](decisions.md#p-014): shared displays, who may log in, auth off for development.
+- **Done when** the UI is only reachable after an HA login, a non-admin service account renders the displays, and nothing in the UI can change the HA connection.
+
 ## M4: polish and frame build
 
 - The v1 widget catalogue complete. Fonts and icons tuned for 1 bit: the panel redesign ([D-015](decisions.md#d-015)) and the web UI restyle ([D-014](decisions.md#d-014)) are done; tune both on the real panel.

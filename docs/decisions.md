@@ -31,6 +31,7 @@ When an item changes status, update it here (status, date, rationale) and in the
 | [D-017](#d-017) | Login details: shared displays, admins only by default, auth off only for development | Decided, implemented |
 | [D-018](#d-018) | Grey mode: 2bpp frames with hybrid refresh, optional per display | Decided, implemented |
 | [D-019](#d-019) | Semantic versioning from a VERSION file; unique image tag per main push | Decided, implemented |
+| [D-020](#d-020) | Hardware: route A, HAT kit (SKU 13504) + the owner's ESP32-S3 | Decided |
 | [P-001](#p-001) | ~~Server stack: TypeScript / Node~~ | Superseded by D-009, D-010 |
 | [P-002](#p-002) | ~~Renderer: Satori + resvg~~ | Superseded by D-011 |
 | [P-003](#p-003) | Layout model: snap grid (e.g. 8×6) | Proposed |
@@ -38,14 +39,14 @@ When an item changes status, update it here (status, date, rationale) and in the
 | [P-005](#p-005) | ~~Firmware: PlatformIO + Arduino + GxEPD2~~ | Superseded by D-012 |
 | [P-006](#p-006) | HA connection: WebSocket API + long-lived token | Proposed |
 | [P-007](#p-007) | Device identity: device ID + token, one layout per device | Proposed |
-| [P-008](#p-008) | Hardware: route A, HAT kit + the owner's ESP32-S3 | Proposed |
+| [P-008](#p-008) | ~~Hardware: route A~~ | Decided as D-020 |
 | [P-009](#p-009) | Frame format and protocol v1 as implemented | Proposed |
 | [P-010](#p-010) | Device setup: SoftAP portal, settings in NVS | Proposed |
 | [P-011](#p-011) | Server storage: one JSON file | Proposed |
 | [P-012](#p-012) | ~~Web UI auth: none by default, optional basic auth~~ | Superseded by D-016 |
 | [P-014](#p-014) | ~~Login details~~ | Decided as D-017 |
 | [P-013](#p-013) | Fonts: Lucida Sans bitmaps for small text, Go fonts for large | Proposed |
-| [O-001](#o-001) | ~~Hardware route~~ | Answered by P-008 |
+| [O-001](#o-001) | ~~Hardware route~~ | Answered by D-020 |
 | [O-002](#o-002) | ~~Is an ESP32-S3 dev board on hand?~~ | Answered: yes |
 | [O-003](#o-003) | ~~Grey mode (4 levels)~~ | Answered by D-018 |
 | [O-004](#o-004) | Home Assistant add-on packaging | Open |
@@ -167,6 +168,11 @@ Built on the 8 × 6 grid, which is still [P-003](#p-003). Details and mockups in
 - **In the binary:** `-ldflags -X main.version=…`, logged at startup and returned by `GET /api/status`. Local builds use `<version>-dev.g<hash>`.
 - The firmware keeps its own version in `firmware/Cargo.toml` for now.
 
+### D-020
+**Hardware: route A**, the Waveshare 7.5" e-Paper HAT kit (SKU 13504) wired to the owner's ESP32-S3 dev board (2026-11-18). The owner chose to buy the HAT kit from Eckstein ([link](https://eckstein-shop.de/WaveShare800C3974802C75inchE-InkdisplayHATforRaspberryPi)). See [hardware.md](hardware.md#route-a-hat-kit--esp32-s3-dev-board).
+- Why: the owner's S3 board has 8 MB PSRAM (read from its efuses), so the 96 KB buffers of [D-018](#d-018) fit easily. Route B's driver board probably has no PSRAM and is a different chip (ESP32, its own build target).
+- Later: to get rid of the jumper wires in the final frame, the panel can move to route B's driver board, or the S3 can be replaced by a smaller S3 board with soldered wires. The second keeps PSRAM and the firmware target.
+
 ## Proposed
 
 These are recommended defaults. The project owner hasn't confirmed them yet.
@@ -195,7 +201,7 @@ These are recommended defaults. The project owner hasn't confirmed them yet.
 *The prototype (2026-11-10) is built on P-003, P-004, P-006 and P-007 as described. They stay Proposed until the project owner confirms them.*
 
 ### P-008
-**Hardware: route A**, the Waveshare 7.5" e-Paper HAT kit (SKU 13504) jumpered to the owner's ESP32-S3 dev board. This follows the recommendation once the owner said they have an S3 (2026-11-10). It's to be confirmed when ordering. See [hardware.md](hardware.md#controller-two-routes).
+**~~Hardware: route A~~.** Decided on 2026-11-18 as [D-020](#d-020).
 
 ### P-009
 **Frame format and protocol v1** as specified in [device-protocol.md](device-protocol.md): a 16-byte little-endian header, 1bpp with MSB = left and bit set = white (2bpp added by [D-018](#d-018)), regions aligned to 8 px, acks carrying a framebuffer CRC-32, and flow control through acks. Implemented and tested with the Go fake device (2026-11-10). Not yet tested on hardware.
@@ -228,7 +234,7 @@ The Wi-Fi password and token are never shown in the form; an empty field keeps t
 ## Open
 
 ### O-001
-**Hardware route.** *Answered 2026-11-10 by [P-008](#p-008) (route A).*
+**Hardware route.** *Answered 2026-11-10 by [P-008](#p-008) (route A), decided 2026-11-18 as [D-020](#d-020).*
 - **A:** Waveshare 7.5" e-Paper HAT kit (SKU 13504), whose driver HAT is jumpered to an ESP32-S3 dev board. This matches D-008.
 - **B:** a raw panel (Eckstein WS13187) plus the Waveshare Universal e-Paper Driver Board ESP32. No wiring, and tidier in a frame.
 

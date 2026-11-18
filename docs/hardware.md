@@ -42,11 +42,14 @@ See [O-001](decisions.md#o-001).
 
 ### Route A: HAT kit + ESP32-S3 dev board
 
-This matches the original prototype idea (S3 dev board + jumpers, [D-008](decisions.md#d-008)).
+**This is the chosen route** ([D-020](decisions.md#d-020)). It matches the original prototype idea (S3 dev board + jumpers, [D-008](decisions.md#d-008)).
 
-- **Waveshare 7.5inch e-Paper HAT**, SKU 13504 *(verified)*. It contains the panel, a driver HAT with a 3.3 V/5 V level shifter, and a 9-pin GH1.25 cable (~20 cm) with loose wire ends *(verified)*.
+- **Waveshare 7.5inch e-Paper HAT**, SKU 13504 *(verified)*. Waveshare lists the contents as the panel, the e-Paper Driver HAT (with a 3.3 V/5 V level shifter), an RPi screw pack and a GH1.25 9-pin cable of ~20 cm *(verified, Waveshare product page, 2026-11-18)*. Whether the cable's far end has loose wires or female jumper plugs is *(to verify)* when it arrives.
 - Pins: VCC, GND, DIN, CLK, CS, DC, RST, BUSY, PWR *(verified)*. These are jumpered to the S3's SPI-capable GPIOs.
-- Price: $54.59 from Waveshare directly *(verified)*. A German shop may be preferable because of shipping and customs.
+- **Bought from Eckstein:** [WaveShare 7.5inch E-Ink Display HAT 800x480 for Raspberry Pi](https://eckstein-shop.de/WaveShare800C3974802C75inchE-InkdisplayHATforRaspberryPi), art. no. WS13504, €67.82 incl. VAT, about 3 weeks delivery *(verified, 2026-11-18)*. The listing doesn't state the package contents. Waveshare's own price is $54.59.
+- Don't confuse it with the 640×384 V1 HAT, the (B) red/black/white HAT (SKU 13505), the (H) four-colour HAT, the 880×528 "HD" HATs or the raw panel without driver board. Some shops list SKU 13504 for the raw panel.
+
+**The owner's ESP32-S3 dev board** *(verified with `esptool chip-id`/`flash-id`, 2026-11-18)*: ESP32-S3 (QFN56) revision v0.2, 16 MB quad flash, **8 MB embedded PSRAM** (`AP_3v3`), i.e. the N16R8 variant. In-package 8 MB PSRAM at 3.3 V is normally octal *(to verify)*. The firmware doesn't enable PSRAM yet (`sdkconfig.defaults` has no `CONFIG_SPIRAM*`).
 - Pros: cheap if an S3 is already on hand, and the S3 has more RAM (plus PSRAM, depending on the board). Cons: wires and two boards in the frame.
 
 **Planned wiring for route A** ([P-008](decisions.md#p-008)). The firmware doesn't drive the panel yet. These are the pins the panel driver will use:
@@ -85,6 +88,16 @@ Firmware keeps pin assignments in a per-board config, so both routes run the sam
 - **Depth**: the electronics (about 48 × 29 mm for the route B board, or the S3 and HAT for route A), the ribbon cable and the USB cable need a **box frame** or a spacer behind the back panel.
 - **The ribbon cable is fragile.** Don't fold it sharply, and secure the board so it can't pull on the cable.
 - **Power**: the device needs constant USB power because it keeps a WebSocket open ([O-005](decisions.md#o-005)). A flat right-angle USB cable looks tidiest.
+
+## Shopping list (route A, chosen)
+
+| Item | Where | Price |
+|---|---|---|
+| Waveshare 7.5inch e-Paper HAT, SKU 13504 | [Eckstein](https://eckstein-shop.de/WaveShare800C3974802C75inchE-InkdisplayHATforRaspberryPi) | €67.82 |
+| ESP32-S3 dev board (N16R8) | on hand | – |
+| Jumper wires, if the HAT cable's ends need them | Any | a few € |
+| Box frame 13×18 cm + passe-partout (cut to ~163 × 98 mm) | Any | ~€10–15 |
+| USB power supply + cable (flat, right-angle) | Any | a few € |
 
 ## Shopping list (route B example)
 

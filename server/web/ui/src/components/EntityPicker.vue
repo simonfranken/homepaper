@@ -143,7 +143,14 @@ function onFocusOut(e: FocusEvent) {
       </button>
     </div>
 
-    <div v-if="open" class="pop">
+    <!-- tabindex: a tap on the sheet's own background keeps it open. -->
+    <div v-if="open" class="pop" tabindex="-1">
+      <div class="pop-head">
+        <button type="button" class="quiet" aria-label="Back" @click="close(true)">
+          <Icon name="back" :size="20" :stroke="3" />
+        </button>
+        <span>{{ (placeholder ?? 'Choose an entity').replace(/…$/, '') }}</span>
+      </div>
       <div class="search">
         <Icon name="search" :size="16" :stroke="3" />
         <input
@@ -400,5 +407,76 @@ li.chosen .mono {
   border-top: 2px dotted var(--ink);
   font-size: var(--t12);
   color: var(--muted);
+}
+
+.pop:focus {
+  outline: 3px solid var(--blue);
+}
+
+.pop-head {
+  display: none;
+}
+
+/* Phones (D-022): the list opens full screen, with a way back. */
+@media (max-width: 700px) {
+  .pop,
+  .pop:focus {
+    position: fixed;
+    z-index: 50;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    border: 0;
+    border-radius: 0;
+    outline: 0;
+  }
+
+  .pop-head {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    min-height: 56px;
+    padding: 0 8px;
+    border-bottom: 2px solid var(--ink);
+    font-size: var(--t17);
+    font-weight: 700;
+  }
+
+  .pop-head button {
+    width: 44px;
+    min-height: 44px;
+    padding: 0;
+  }
+
+  .search {
+    min-height: 52px;
+    padding: 0 14px;
+  }
+
+  .chips {
+    padding: 10px 14px;
+  }
+
+  .chip {
+    min-height: 36px;
+    padding: 0 14px;
+  }
+
+  ul {
+    flex: 1;
+    max-height: none;
+    padding: 0;
+  }
+
+  li {
+    min-height: 60px;
+    padding: 8px 16px;
+    border-radius: 0;
+    border-bottom: 2px dotted var(--line-off);
+  }
+
+  .foot {
+    padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
+  }
 }
 </style>

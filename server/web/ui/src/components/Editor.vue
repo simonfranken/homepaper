@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { GridLayout, GridItem } from 'grid-layout-plus'
 import { api, type Device, type Dividers, type Entity, type Layout, type Widget, type WidgetKind } from '../api'
 import Icon from './Icon.vue'
 import { connectLive, type LiveFrame } from '../live'
+import { phone } from '../phone'
 import WidgetForm from './WidgetForm.vue'
 
 const props = defineProps<{ device: Device; kinds: WidgetKind[]; entities: Entity[]; previewVersion: number }>()
@@ -288,7 +289,8 @@ function freeSpot(w: number, h: number, ignore?: string) {
 }
 
 // Arrow keys move the selected widget by one cell, with Shift they resize it.
-function nudge(dx: number, dy: number, resize: boolean) {
+// The phone's Move and Size buttons step the same way.
+function nudged(dx: number, dy: number, resize: boolean) {
   const w = selectedWidget.value
   const kind = selectedKind.value
   if (!w || !kind) return
@@ -297,6 +299,13 @@ function nudge(dx: number, dy: number, resize: boolean) {
     : { x: w.x + dx, y: w.y + dy, w: w.w, h: w.h }
   if ((next.x === w.x && next.y === w.y && next.w === w.w && next.h === w.h) || !fits(next.x, next.y, next.w, next.h, w.id))
     return
+  return next
+}
+
+function nudge(dx: number, dy: number, resize: boolean) {
+  const w = selectedWidget.value
+  const next = nudged(dx, dy, resize)
+  if (!w || !next) return
   record(`nudge:${w.id}:${resize}`)
   Object.assign(w, next)
   gridItems.value = toItems()
@@ -492,6 +501,32 @@ function onFramePointerDown(e: PointerEvent) {
   if (!(e.target as HTMLElement).closest('.cell')) selectedId.value = undefined
 }
 
+// ---- Phones (D-022) ---------------------------------------------------------
+// No dragging on the preview: a tap selects, the sheet's buttons move and
+// resize. The toolbar's switches live in the Options sheet, the palette in
+// the Add sheet.
+const addSheet = ref<HTMLDialogElement>()
+const optionsSheet = ref<HTMLDialogElement>()
+
+function addFromSheet(k: WidgetKind) {
+  addSheet.value?.close()
+  addWidget(k)
+}
+
+// Reading order on the panel: top to bottom, left to right.
+const listed = computed(() => [...layout.value.widgets].sort((a, b) => a.y - b.y || a.x - b.x))
+
+function listLine(w: Widget) {
+  if (brokenIds.value.has(w.id)) return "Doesn't fit at this display size"
+  if (problems.value[w.id]) return problems.value[w.id]
+  return `${kindByName.value[w.kind]?.label ?? w.kind} · ${w.w} × ${w.h}`
+}
+
+// The sheet opens under the preview: bring both into view.
+watch(selectedId, (id, old) => {
+  if (phone.value && id && id !== old) nextTick(() => window.scrollTo({ top: 0, behavior: 'smooth' }))
+})
+
 const isMac = navigator.platform.toLowerCase().includes('mac')
 const modKey = isMac ? '⌘' : 'Ctrl'
 </script>
@@ -500,6 +535,7 @@ const modKey = isMac ? '⌘' : 'Ctrl'
   <section class="editor">
     <div class="stage">
       <div class="bar">
+        <template v-if="!phone">
         <div class="group">
           <button class="small" :disabled="!undoStack.length" :title="`Undo (${modKey}+Z)`" @click="undo">
             <Icon name="undo" :size="14" :stroke="3" />
@@ -583,6 +619,7 @@ const modKey = isMac ? '⌘' : 'Ctrl'
           <span class="hatch-key" aria-hidden="true"></span>
           Area {{ area.w }} × {{ area.h }} · {{ cols }} × {{ rows }} cells
         </button>
+        </template>
         <span class="save small" :class="saveState" role="status">
           <template v-if="saveState === 'error'">
             <Icon name="warn" :size="14" />
@@ -600,7 +637,7 @@ const modKey = isMac ? '⌘' : 'Ctrl'
         <button class="small" @click="edgesOff">Turn off</button>
       </p>
 
-      <div class="scroller" :class="{ actual: actualSize }">
+      <div class="scroller" :class="{ actual: actualSize, pinned: phone && selectedWidget }">
         <div
           class="bezel"
           :style="actualSize ? { width: `${device.panel.width + 28}px` } : { maxWidth: `${device.panel.width + 28}px` }"
@@ -608,13 +645,14 @@ const modKey = isMac ? '⌘' : 'Ctrl'
           <div
             ref="frameEl"
             class="frame"
-            :class="{ dragging }"
+            :class="{ dragging, touch: phone }"
             :style="{
               aspectRatio: `${device.panel.width} / ${device.panel.height}`,
               '--col': `${colWidth}px`,
               '--row': `${rowHeight}px`,
             }"
-            @pointerdown="onFramePointerDown"
+            @pointerdown="phone || onFramePointerDown($event)"
+            @click="phone && onFramePointerDown($event)"
           >
             <img
               v-show="!liveReady"
@@ -657,6 +695,8 @@ const modKey = isMac ? '⌘' : 'Ctrl'
                 :prevent-collision="true"
                 :is-bounded="true"
                 :auto-size="false"
+                :is-draggable="!phone"
+                :is-resizable="!phone"
                 @layout-updated="onLayoutUpdated"
               >
                 <GridItem
@@ -671,7 +711,8 @@ const modKey = isMac ? '⌘' : 'Ctrl'
                   :min-h="item.minH"
                   class="cell"
                   :class="{ selected: item.i === selectedId, problem: problems[item.i] }"
-                  @pointerdown="selectedId = String(item.i)"
+                  @pointerdown="phone || (selectedId = String(item.i))"
+                  @click="selectedId = String(item.i)"
                   @move="dragging = true"
                   @resize="dragging = true"
                   @moved="dragging = false"
@@ -702,7 +743,7 @@ const modKey = isMac ? '⌘' : 'Ctrl'
             </div>
             <div v-if="!layout.widgets.length" class="blank">
               <p class="blank-title">This display is empty.</p>
-              <p class="small">Add a widget from the list to start the layout.</p>
+              <p class="small">{{ phone ? 'Add a widget from the bar below' : 'Add a widget from the list' }} to start the layout.</p>
             </div>
           </div>
         </div>
@@ -717,7 +758,7 @@ const modKey = isMac ? '⌘' : 'Ctrl'
         <template v-else><span class="spin"></span> Connecting the live preview…</template>
       </p>
 
-      <section v-if="broken.length" class="card broken" aria-labelledby="broken-h">
+      <section v-if="broken.length && !phone" class="card broken" aria-labelledby="broken-h">
         <div class="broken-head">
           <h3 id="broken-h">
             <Icon name="warn" :size="16" :stroke="3" />
@@ -747,14 +788,35 @@ const modKey = isMac ? '⌘' : 'Ctrl'
         <span>{{ notice }}</span>
         <button v-if="notice === 'Widget removed.'" class="small" @click="undo">Undo</button>
       </p>
-      <p class="hint small muted">
+      <p v-if="!phone" class="hint small muted">
         Drag a widget to move it, drag its corner to resize. With a widget selected:
         <kbd>←</kbd> <kbd>→</kbd> <kbd>↑</kbd> <kbd>↓</kbd> move, <kbd>Shift</kbd> + arrows resize,
         <kbd>{{ modKey }}</kbd> <kbd>D</kbd> duplicates, <kbd>Del</kbd> removes, <kbd>Esc</kbd> deselects.
       </p>
     </div>
 
-    <aside class="inspector" aria-label="Inspector">
+    <aside class="inspector" :class="{ sheet: phone && selectedWidget }" aria-label="Inspector">
+      <section v-if="phone && !selectedWidget" class="card wlist" aria-labelledby="wl-h">
+        <div class="wl-head">
+          <h3 id="wl-h">Widgets</h3>
+          <span class="small muted">{{ layout.widgets.length }} · {{ cols }} × {{ rows }} cells</span>
+        </div>
+        <ul v-if="layout.widgets.length">
+          <li v-for="w in listed" :key="w.id">
+            <button class="wl-row" @click="selectedId = w.id">
+              <span class="kind-icon" :class="{ bad: brokenIds.has(w.id) || problems[w.id] }">
+                <Icon :name="brokenIds.has(w.id) || problems[w.id] ? 'warn' : w.kind" :size="18" />
+              </span>
+              <span class="k-text">
+                <span class="k-label">{{ widgetName(w) }}</span>
+                <span class="k-desc" :class="{ bad: brokenIds.has(w.id) || problems[w.id] }">{{ listLine(w) }}</span>
+              </span>
+              <Icon name="right" :size="16" :stroke="3" />
+            </button>
+          </li>
+        </ul>
+        <p v-else class="small muted wl-empty">No widgets yet. Add one from the bar below.</p>
+      </section>
       <section v-if="selectedWidget && selectedKind" class="card pane">
         <div class="pane-head">
           <div class="who">
@@ -767,9 +829,41 @@ const modKey = isMac ? '⌘' : 'Ctrl'
               </p>
             </div>
           </div>
-          <button class="quiet small" title="Deselect (Esc)" @click="selectedId = undefined">Done</button>
+          <button :class="phone ? 'primary' : 'quiet small'" title="Deselect (Esc)" @click="selectedId = undefined">Done</button>
         </div>
         <div class="pane-body">
+          <div v-if="phone && !brokenIds.has(selectedWidget.id)" class="adjust">
+            <fieldset>
+              <legend>Move</legend>
+              <div class="pad">
+                <button class="p-up" aria-label="Move up" :disabled="!nudged(0, -1, false)" @click="nudge(0, -1, false)">
+                  <Icon name="up" :size="18" :stroke="3" />
+                </button>
+                <button class="p-left" aria-label="Move left" :disabled="!nudged(-1, 0, false)" @click="nudge(-1, 0, false)">
+                  <Icon name="left" :size="18" :stroke="3" />
+                </button>
+                <button class="p-down" aria-label="Move down" :disabled="!nudged(0, 1, false)" @click="nudge(0, 1, false)">
+                  <Icon name="down" :size="18" :stroke="3" />
+                </button>
+                <button class="p-right" aria-label="Move right" :disabled="!nudged(1, 0, false)" @click="nudge(1, 0, false)">
+                  <Icon name="right" :size="18" :stroke="3" />
+                </button>
+              </div>
+            </fieldset>
+            <fieldset>
+              <legend>Size</legend>
+              <div class="stepper">
+                <button aria-label="Narrower" :disabled="!nudged(-1, 0, true)" @click="nudge(-1, 0, true)">−</button>
+                <span>{{ selectedWidget.w }} wide</span>
+                <button aria-label="Wider" :disabled="!nudged(1, 0, true)" @click="nudge(1, 0, true)">+</button>
+              </div>
+              <div class="stepper">
+                <button aria-label="Shorter" :disabled="!nudged(0, -1, true)" @click="nudge(0, -1, true)">−</button>
+                <span>{{ selectedWidget.h }} tall</span>
+                <button aria-label="Taller" :disabled="!nudged(0, 1, true)" @click="nudge(0, 1, true)">+</button>
+              </div>
+            </fieldset>
+          </div>
           <div v-if="brokenIds.has(selectedWidget.id)" class="notice bad doesnt-fit" role="status">
             <p><Icon name="warn" :size="18" /> Doesn't fit at this display size</p>
             <p class="small">
@@ -808,7 +902,7 @@ const modKey = isMac ? '⌘' : 'Ctrl'
         </div>
       </section>
 
-      <section class="card palette-pane">
+      <section v-if="!phone" class="card palette-pane">
         <h3>Add a widget</h3>
         <ul class="palette">
           <li v-for="k in kinds" :key="k.name">
@@ -824,6 +918,93 @@ const modKey = isMac ? '⌘' : 'Ctrl'
         </ul>
       </section>
     </aside>
+
+    <template v-if="phone">
+      <nav class="phone-bar" aria-label="Editing">
+        <button class="icon" aria-label="Undo" :disabled="!undoStack.length" @click="undo">
+          <Icon name="undo" :size="20" :stroke="2.5" />
+        </button>
+        <button class="icon" aria-label="Redo" :disabled="!redoStack.length" @click="redo">
+          <Icon name="redo" :size="20" :stroke="2.5" />
+        </button>
+        <button class="icon" aria-label="Layout options" @click="optionsSheet?.showModal()">
+          <Icon name="sliders" :size="20" :stroke="2.5" />
+        </button>
+        <button class="primary add" @click="addSheet?.showModal()">
+          <Icon name="plus" :size="16" :stroke="3" />
+          Add widget
+        </button>
+      </nav>
+
+      <dialog ref="addSheet" class="sheet-dialog" aria-labelledby="add-h" @click.self="addSheet?.close()">
+        <div class="sd">
+          <div class="sd-head">
+            <div>
+              <h3 id="add-h">Add a widget</h3>
+              <p class="small muted">It goes into the first free spot. Move it after.</p>
+            </div>
+            <button class="quiet icon" aria-label="Close" @click="addSheet?.close()">
+              <Icon name="close" :size="18" :stroke="3" />
+            </button>
+          </div>
+          <ul class="kind-grid">
+            <li v-for="k in kinds" :key="k.name">
+              <button :title="k.description" @click="addFromSheet(k)">
+                <Icon :name="k.name" :size="26" />
+                <span class="kg-label">{{ k.label }}</span>
+                <span class="k-size">{{ k.default_w }}×{{ k.default_h }}</span>
+              </button>
+            </li>
+          </ul>
+        </div>
+      </dialog>
+
+      <dialog ref="optionsSheet" class="sheet-dialog" aria-labelledby="opt-h" @click.self="optionsSheet?.close()">
+        <div class="sd">
+          <div class="sd-head">
+            <h3 id="opt-h">Layout options</h3>
+            <button class="quiet icon" aria-label="Close" @click="optionsSheet?.close()">
+              <Icon name="close" :size="18" :stroke="3" />
+            </button>
+          </div>
+          <div class="sd-body">
+            <div role="group" aria-labelledby="opt-div">
+              <p id="opt-div" class="opt-label">Between widgets</p>
+              <div class="seg wide">
+                <button :aria-pressed="dividers === 'rules'" :class="{ on: dividers === 'rules' }" @click="setDividers('rules')">
+                  Rules
+                </button>
+                <button :aria-pressed="dividers === 'frames'" :class="{ on: dividers === 'frames' }" @click="setDividers('frames')">
+                  Frames
+                </button>
+              </div>
+            </div>
+            <div role="group" aria-labelledby="opt-col">
+              <p id="opt-col" class="opt-label">Colours</p>
+              <div class="seg wide">
+                <button :aria-pressed="!greys" :class="{ on: !greys }" @click="setGreys(false)">Black/white</button>
+                <button :aria-pressed="greys" :class="{ on: greys }" :disabled="!canGrey" @click="setGreys(true)">4 greys</button>
+              </div>
+              <p class="small muted">
+                {{
+                  canGrey
+                    ? 'Greys for labels, rules and weather icons. Values stay black; a change to grey costs a full refresh.'
+                    : 'This display reports a black/white panel.'
+                }}
+              </p>
+            </div>
+            <button :aria-pressed="actualSize" @click="actualSize = !actualSize">
+              <Icon name="actual" :size="16" />
+              {{ actualSize ? 'Fit the preview to the screen' : 'Show the preview at actual size' }}
+            </button>
+            <button v-if="!fullArea" class="area-chip" @click="optionsSheet?.close(); emit('openDisplay')">
+              <span class="hatch-key" aria-hidden="true"></span>
+              Area {{ area.w }} × {{ area.h }} · {{ cols }} × {{ rows }} cells
+            </button>
+          </div>
+        </div>
+      </dialog>
+    </template>
   </section>
 </template>
 
@@ -1415,6 +1596,358 @@ const modKey = isMac ? '⌘' : 'Ctrl'
 @media (max-width: 1080px) {
   .hint {
     display: none;
+  }
+}
+
+/* ---- Phones (D-022) ------------------------------------------------------ */
+
+/* Without dragging, a finger on the preview scrolls the page. */
+.frame.touch,
+.frame.touch .cell {
+  touch-action: auto;
+  cursor: pointer;
+}
+
+.frame.touch .cell:hover:not(.selected) {
+  outline-color: transparent;
+}
+
+.frame.touch .cell.selected .tag {
+  opacity: 1;
+}
+
+/* Too small for words on a phone: the dashed outline marks the problem and
+   the widget list names it. */
+.frame.touch .flag {
+  display: none;
+}
+
+.wl-row .k-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wlist {
+  padding: 4px 0;
+}
+
+.wl-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px 8px;
+}
+
+.wl-head h3 {
+  font-size: var(--t17);
+}
+
+.wlist ul {
+  list-style: none;
+  padding: 0;
+}
+
+.wl-row {
+  width: 100%;
+  min-height: 56px;
+  justify-content: flex-start;
+  gap: 12px;
+  padding: 6px 14px;
+  border: 0;
+  border-top: 2px dotted var(--line-off);
+  border-radius: 0;
+  background: none;
+  text-align: left;
+  white-space: normal;
+  line-height: 1.35;
+}
+
+.wl-row:hover:not(:disabled) {
+  background: var(--blue-wash);
+  color: var(--ink);
+}
+
+.kind-icon.bad {
+  border-color: var(--bad);
+  color: var(--bad);
+}
+
+.k-desc.bad {
+  color: var(--bad);
+  font-weight: 500;
+}
+
+.wl-empty {
+  padding: 4px 14px 12px;
+}
+
+.adjust {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.adjust fieldset {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.adjust legend,
+.opt-label {
+  padding: 0 0 6px;
+  font-size: var(--t12);
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.pad {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-areas: '. up .' 'left down right';
+  gap: 4px;
+}
+
+.pad button {
+  min-height: 44px;
+  padding: 0;
+}
+
+.p-up {
+  grid-area: up;
+}
+.p-left {
+  grid-area: left;
+}
+.p-down {
+  grid-area: down;
+}
+.p-right {
+  grid-area: right;
+}
+
+.stepper {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  border: 2px solid var(--ink);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.stepper span {
+  flex: 1;
+  text-align: center;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.stepper button {
+  width: 44px;
+  min-height: 40px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  font-size: var(--t20);
+}
+
+.stepper button:first-child {
+  border-right: 2px solid var(--ink);
+}
+
+.stepper button:last-child {
+  border-left: 2px solid var(--ink);
+}
+
+.phone-bar {
+  position: fixed;
+  z-index: 20;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  gap: 8px;
+  padding: 10px 16px calc(10px + env(safe-area-inset-bottom));
+  border-top: 2px solid var(--ink);
+  background: var(--sheet);
+}
+
+.phone-bar button {
+  min-height: 48px;
+}
+
+button.icon {
+  width: 48px;
+  min-height: 44px;
+  padding: 0;
+  flex: none;
+}
+
+.phone-bar .add {
+  flex: 1;
+}
+
+/* A bottom sheet: the shared dialog look, anchored to the bottom edge. */
+dialog.sheet-dialog {
+  width: 100%;
+  max-width: 100%;
+  max-height: 85dvh;
+  margin: auto 0 0;
+  padding: 0;
+  border-width: 2px 0 0;
+  border-radius: 12px 12px 0 0;
+  box-shadow: 0 -6px 0 var(--ink);
+}
+
+.sd {
+  padding: 4px 0 calc(16px + env(safe-area-inset-bottom));
+}
+
+.sd-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 8px 12px 16px;
+  border-bottom: 2px solid var(--ink);
+}
+
+.sd-head h3 {
+  font-size: var(--t20);
+}
+
+.kind-grid {
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  padding: 16px;
+}
+
+.kind-grid button {
+  width: 100%;
+  min-height: 96px;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 4px;
+  white-space: normal;
+  text-align: center;
+  line-height: 1.2;
+}
+
+.kind-grid button:hover:not(:disabled) .k-size {
+  color: inherit;
+}
+
+.kg-label {
+  font-weight: 700;
+}
+
+.sd-body {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 16px;
+}
+
+.sd-body > button {
+  min-height: 48px;
+}
+
+.seg.wide {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-bottom: 6px;
+}
+
+.seg.wide button {
+  min-height: 40px;
+}
+
+@media (max-width: 700px) {
+  .editor {
+    display: flex;
+    flex-direction: column;
+    flex-wrap: nowrap;
+    align-items: stretch;
+    gap: 0;
+    padding-bottom: 80px;
+  }
+
+  /* The stage's parts join the column, so the preview can stay pinned
+     while the sheet below it scrolls. */
+  .stage {
+    display: contents;
+  }
+
+  .bar {
+    margin-bottom: 8px;
+  }
+
+  .save {
+    margin-left: 0;
+  }
+
+  .bezel {
+    padding: 8px;
+    border-radius: 10px;
+  }
+
+  .scroller.pinned {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    margin: 0 -16px;
+    padding: 8px 16px;
+    background: var(--paper);
+  }
+
+  .live {
+    margin-top: 6px;
+  }
+
+  .inspector {
+    flex: none;
+    max-width: none;
+    margin-top: 14px;
+  }
+
+  .inspector.sheet .pane {
+    border-radius: 12px 12px var(--radius) var(--radius);
+    box-shadow: 0 -6px 0 var(--ink);
+    margin-top: 6px;
+  }
+
+  .pane-head {
+    align-items: center;
+    padding: 12px 12px 12px 16px;
+  }
+
+  .pane-actions button {
+    flex: 1;
+    min-height: 44px;
+  }
+
+  .toast {
+    position: fixed;
+    z-index: 25;
+    left: 16px;
+    right: 16px;
+    bottom: calc(84px + env(safe-area-inset-bottom));
+    margin: 0;
+  }
+}
+
+/* A phone on its side has no room to pin the preview. */
+@media (max-width: 700px) and (max-height: 560px) {
+  .scroller.pinned {
+    position: static;
   }
 }
 </style>

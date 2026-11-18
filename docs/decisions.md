@@ -33,6 +33,7 @@ When an item changes status, update it here (status, date, rationale) and in the
 | [D-019](#d-019) | Semantic versioning from a VERSION file; unique image tag per main push | Decided, implemented |
 | [D-020](#d-020) | Hardware: route A, HAT kit (SKU 13504) + the owner's ESP32-S3 | Decided |
 | [D-021](#d-021) | Display area smaller than the panel, with a margin and a minimum cell size | Decided, implemented (cell size still proposed) |
+| [D-022](#d-022) | Full-functionality web UI on phones (Concept B, "Pocket editor") | Decided, implemented |
 | [P-001](#p-001) | ~~Server stack: TypeScript / Node~~ | Superseded by D-009, D-010 |
 | [P-002](#p-002) | ~~Renderer: Satori + resvg~~ | Superseded by D-011 |
 | [P-003](#p-003) | Layout model: snap grid (e.g. 8×6) | Proposed |
@@ -183,6 +184,12 @@ Built on the 8 × 6 grid, which is still [P-003](#p-003). Details and mockups in
 - **Device side unchanged:** the server draws the margin into full-panel frames, so there's no protocol change.
 - *Still open:* the minimum cell size (suggested 80 × 64 px against today's 100 × 80) and whether the width is rounded to a multiple of 8.
 - **Implemented 2026-11-18** (server 0.2.0), building on the *suggested* minimum cell size of 80 × 64 px (`render.MinCellW/H`, one place to change). For now the width is **not** rounded (still open): any width from one cell to the panel is accepted, and the editor's −/+ buttons step by 8 px. The editor design is the canvas "Display area editor"; the setting lives in the Display tab, and a calibration switch draws a 1 px line around the area on the panel.
+
+### D-022
+**The web UI works fully on phones** (2026-11-18). The canvas "homepaper mobile concepts" showed two concepts: A, a phone view without editing (displays, live preview, status, setup), and B, the whole editor adapted to touch. The project owner chose **B**: everything that works on a computer also works on a phone, with editing made for touch instead of left out.
+- **Decided:** full functionality on phones, following B's approach. Widgets are picked by tapping the preview or a widget list, edited in a sheet under the preview, moved and resized with buttons (one cell per tap), entities are picked on a full screen, and new widgets come from a sheet of kinds.
+- **Implementation's choices (not confirmed separately):** the phone layout applies at 700 px wide and below. Dragging on the preview is off there, so a finger on the preview scrolls the page; the canvas's "long-press to drag" was dropped because the grid library has no long-press, and the buttons cover moving and resizing. Dividers and Colours move from the toolbar into an Options sheet. The header keeps the display tabs as a scrolling row instead of the canvas's display switcher. Inputs are set at 17 px on phones so iOS doesn't zoom on focus.
+- **Not taken from A:** "Full refresh now" would need a new protocol message and isn't part of this decision.
 
 ## Proposed
 

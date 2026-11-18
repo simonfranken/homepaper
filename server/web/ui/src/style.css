@@ -403,6 +403,21 @@ dialog::backdrop {
   }
 }
 
+/* Phones (D-022): below 16 px iOS zooms into a field on focus. */
+@media (max-width: 700px) {
+  input,
+  select,
+  textarea {
+    font-size: var(--t17);
+  }
+
+  /* Small buttons still need room for a finger. */
+  button.small,
+  .button.small {
+    min-height: 40px;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   * {
     transition: none !important;

@@ -536,7 +536,30 @@ main {
   }
 
   main {
-    padding: 20px 16px 40px;
+    padding: 16px 16px 40px;
+  }
+
+  /* D-022: the status keeps its dot, the entity count goes. */
+  .count {
+    display: none;
+  }
+
+  .title {
+    gap: 12px;
+    margin-bottom: 14px;
+  }
+
+  .name h2 {
+    font-size: var(--t25);
+  }
+
+  .views {
+    width: 100%;
+  }
+
+  .views button {
+    flex: 1;
+    min-height: 40px;
   }
 
   .banner {

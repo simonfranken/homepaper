@@ -25,6 +25,11 @@ const icons: Record<string, { d: string; fill?: string }> = {
   warn: { d: 'M12 3 2 21h20zM12 10v4M12 17.5v.5' },
   grip: { d: 'M9 6h.01M9 12h.01M9 18h.01M15 6h.01M15 12h.01M15 18h.01' },
   up: { d: 'm6 15 6-6 6 6' },
+  down: { d: 'm6 9 6 6 6-6' },
+  left: { d: 'm15 6-6 6 6 6' },
+  right: { d: 'm9 6 6 6-6 6' },
+  back: { d: 'm15 6-6 6 6 6' },
+  sliders: { d: 'M4 7h10M18 7h2M4 17h4M12 17h8M16 5v4M10 15v4' },
   // widget kinds
   value: { d: 'M4 19h16M7 15v-5M12 15V5M17 15v-3' },
   temperature: { d: 'M10 4.5a2 2 0 0 1 4 0V14a4 4 0 1 1-4 0z', fill: 'M12 15.4a1.6 1.6 0 1 0 0 3.2 1.6 1.6 0 0 0 0-3.2z' },

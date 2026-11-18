@@ -27,9 +27,14 @@ func main() {
 	out := flag.String("png", "", "write the framebuffer to this PNG after each frame")
 	corrupt := flag.Bool("corrupt", false, "flip a bit after the first frame to test checksum mismatch handling")
 	badCRC := flag.Bool("badcrc", false, "report a wrong checksum for every frame (systematic mismatch)")
+	format := flag.String("format", frame.Format2bpp, "pixel format to report: 1bpp or 2bpp")
 	flag.Parse()
 	if *id == "" || *token == "" {
 		log.Fatal("-id and -token are required")
+	}
+	depth := frame.DepthOf(*format)
+	if depth == 0 {
+		log.Fatalf("unknown format %q", *format)
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
@@ -49,10 +54,10 @@ func main() {
 	}
 	send(map[string]any{
 		"type": "hello", "device_id": *id, "token": *token, "fw_version": "fake-0.1.0",
-		"panel":        map[string]any{"model": "waveshare-7in5-v2", "width": 800, "height": 480, "format": "1bpp"},
+		"panel":        map[string]any{"model": "waveshare-7in5-v2", "width": 800, "height": 480, "format": *format},
 		"capabilities": []string{"partial"},
 	})
-	fb := frame.New(800, 480)
+	fb := frame.NewDepth(800, 480, depth)
 	start := time.Now()
 	go func() {
 		t := time.NewTicker(10 * time.Second)
@@ -72,7 +77,7 @@ func main() {
 			log.Printf("server: %s", data)
 			continue
 		}
-		h, payload, err := frame.Decode(data)
+		h, payload, err := frame.Decode(data, depth)
 		if err != nil {
 			log.Printf("bad frame: %v", err)
 			continue
@@ -88,7 +93,11 @@ func main() {
 			sum ^= 1
 		}
 		crc := fmt.Sprintf("%08x", sum)
-		log.Printf("frame %d %s region=%+v bytes=%d crc=%s", h.Seq, kind, h.Region, len(data), crc)
+		grey := ""
+		if fb.HasGrey() {
+			grey = " grey"
+		}
+		log.Printf("frame %d %s%s region=%+v bytes=%d crc=%s", h.Seq, kind, grey, h.Region, len(data), crc)
 		if *out != "" {
 			if f, err := os.Create(*out); err == nil {
 				_ = png.Encode(f, fb.ToGray())

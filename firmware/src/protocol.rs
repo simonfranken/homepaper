@@ -45,7 +45,7 @@ pub fn parse(buf: &[u8], width: usize, height: usize) -> Result<(Header, &[u8])>
         bail!("region {r:?} outside the panel or not byte-aligned");
     }
     let data = &buf[HEADER_SIZE..];
-    if data.len() != r.w as usize / 8 * r.h as usize {
+    if data.len() != r.w as usize * crate::display::DEPTH / 8 * r.h as usize {
         bail!("payload {} bytes does not match region {r:?}", data.len());
     }
     if h.kind != KIND_FULL && h.kind != KIND_PARTIAL {

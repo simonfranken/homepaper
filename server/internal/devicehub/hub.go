@@ -16,6 +16,7 @@ import (
 
 	"github.com/coder/websocket"
 
+	"homepaper/internal/frame"
 	"homepaper/internal/ha"
 	"homepaper/internal/store"
 )
@@ -219,7 +220,7 @@ func (h *Hub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.reject(ctx, conn, "unknown device or wrong token")
 		return
 	}
-	if hl.Panel.Width%8 != 0 || hl.Panel.Width <= 0 || hl.Panel.Height <= 0 || hl.Panel.Format != "1bpp" {
+	if hl.Panel.Width%8 != 0 || hl.Panel.Width <= 0 || hl.Panel.Height <= 0 || frame.DepthOf(hl.Panel.Format) == 0 {
 		h.reject(ctx, conn, "unsupported panel")
 		return
 	}

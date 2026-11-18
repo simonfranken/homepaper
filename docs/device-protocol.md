@@ -19,13 +19,13 @@ Device → server, the first message:
   "device_id": "living-room",
   "token": "5bedfeb8541aace0c81ee30f453cdfde",
   "fw_version": "0.1.0",
-  "panel": { "model": "none-800x480", "width": 800, "height": 480, "format": "1bpp" },
+  "panel": { "model": "none-800x480", "width": 800, "height": 480, "format": "2bpp" },
   "capabilities": ["partial"]
 }
 ```
 
 - `device_id` and `token` are created in the web UI ([P-007](decisions.md#p-007)).
-- `panel.width` must be a multiple of 8, and `format` must be `1bpp` (the only format in v1). The server renders at this size and stores the panel info on the device.
+- `panel.width` must be a multiple of 8, and `format` must be `1bpp` or `2bpp` (4 grey levels, [D-018](decisions.md#d-018)). The format fixes the pixel data of every frame on this connection. The server renders at this size and stores the panel info on the device. The firmware reports `2bpp`; the frame header version stays `1`, because only the payload length depends on the negotiated format and 1bpp devices are unaffected.
 - `model` is informational. Until a panel is connected, the firmware reports `none-800x480` (it uses `NullPanel`).
 
 Server → device on success:
@@ -54,18 +54,25 @@ A 16-byte header, **little-endian**, followed by the pixel data:
 | 10 | 2 | y | region top edge, px |
 | 12 | 2 | w | region width, px, **multiple of 8** |
 | 14 | 2 | h | region height, px |
-| 16 | w/8 × h | data | packed pixels of the region |
+| 16 | w × bpp / 8 × h | data | packed pixels of the region (`w/8 × h` at 1bpp, `w/4 × h` at 2bpp) |
 
 **Pixel format (1bpp):**
 - Rows are top to bottom, each row is `w/8` bytes.
 - Within a byte, the **most significant bit is the leftmost pixel**.
 - **Bit set (1) = white, bit clear (0) = black.** A white screen is all `0xFF`.
 
+**Pixel format (2bpp):**
+- Rows are top to bottom, each row is `w/4` bytes.
+- Within a byte, the **most significant two bits are the leftmost pixel**.
+- **0 = black, 1 = dark grey, 2 = light grey, 3 = white.** A white screen is all `0xFF`.
+- Regions stay aligned to 8 px, so each region row is a whole number of bytes in both formats.
+
 A panel driver converts this to whatever the controller expects (some invert it).
 
 **Semantics:**
 - The device copies the region into its framebuffer (full size, allocated once at boot), then refreshes the panel. A full frame uses a full refresh. A partial frame uses a partial refresh of that region.
-- A full frame is always the whole panel (`x = y = 0`, `w × h` = panel size). At 800 × 480 that's 48,000 data bytes plus the 16-byte header.
+- A full frame is always the whole panel (`x = y = 0`, `w × h` = panel size). At 800 × 480 that's 48,000 data bytes at 1bpp or 96,000 at 2bpp, plus the 16-byte header.
+- **On a 2bpp panel, a full frame is a 4-grey refresh and a partial frame a black/white partial refresh.** The server guarantees that every pixel that *changes* in a partial frame is black or white before and after; it sends a full frame whenever a grey pixel changes. A partial region may still contain unchanged grey pixels (e.g. a grey rule inside a changed band). For a partial refresh the driver must leave them as they are, e.g. by writing the same black/white value into the controller's old and new RAM for unchanged pixels *(to verify on hardware)*.
 - The device rejects frames whose region falls outside the panel, isn't aligned to 8, or doesn't match the payload length (it logs a warning and sends no ack).
 
 ## Ack (device → server)
@@ -106,7 +113,8 @@ Settings are in `devicehub.Settings`. Some can be changed with environment varia
   - more than 50 % of the panel changed;
   - there have been 20 partial updates since the last full one (`HOMEPAPER_FULL_REFRESH_EVERY`), which clears ghosting;
   - more than 1 hour has passed since the last full frame;
-  - a partial frame's checksum didn't match (see Ack).
+  - a partial frame's checksum didn't match (see Ack);
+  - on a 2bpp panel, a changed pixel is grey before or after (`frame.ChangedGrey`, [D-018](decisions.md#d-018)).
 
 ## Editor live preview
 
@@ -121,5 +129,4 @@ The client is `server/web/ui/src/live.ts`.
 ## Possible later additions
 
 - An HTTP polling mode for battery devices: `GET /api/device/{id}/frame` with `ETag` / `If-None-Match`, then deep sleep ([O-005](decisions.md#o-005)).
-- `2bpp` (4 grey levels) as a second `format` ([O-003](decisions.md#o-003)).
 - Over-the-air firmware updates announced over the same socket.

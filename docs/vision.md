@@ -12,7 +12,7 @@ The name is *home* (Home Assistant, smart home) plus *paper* (newspaper, e-paper
 - **Thin device.** The ESP32 only receives prerendered frames and drives the panel. Changing layouts or adding widgets never requires reflashing ([D-003](decisions.md#d-003)).
 - **Timely but calm.** Changes in HA reach the display through push updates, rate-limited and diffed so the e-ink panel isn't refreshing all the time ([D-005](decisions.md#d-005)).
 - **Self-hosted.** The server runs in the user's own infrastructure, next to Home Assistant.
-- **Looks good on e-ink.** Crisp 1-bit typography and a layout designed for paper, not a shrunken web dashboard.
+- **Looks good on e-ink.** Crisp black-and-white typography (with optional greys for structure) and a layout designed for paper, not a shrunken web dashboard.
 
 ## Non-goals (for now)
 

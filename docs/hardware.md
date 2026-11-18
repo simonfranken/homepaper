@@ -14,6 +14,7 @@
 | Fast refresh | 1.5 s | *(verified)* |
 | Partial refresh | Supported, 0.4 s | *(verified)* |
 | 4-grey refresh | 2.1 s | *(verified)* |
+| Partial refresh in 4-grey mode | Not offered (Waveshare lists partial refresh for black/white only) | *(to verify)*: homepaper assumes it and uses black/white partials over a grey image ([D-018](decisions.md#d-018)) |
 | Outline | 170.2 × 111.2 mm | *(verified)* |
 | Display area | 163.2 × 97.92 mm | *(verified)* |
 | Interface | SPI | *(verified)* |
@@ -25,6 +26,13 @@
 ### Panels considered and rejected for v1
 
 **7.5" 800×480 black/white/red ("(B)" variant).** It has no partial refresh and a full refresh takes about 15–25 s with flashing. Waveshare's guidance for color panels is also a minimum time between refreshes of roughly 3 minutes *(to verify)*. That conflicts with push updates, so it's an option for a later "accent color" version, not the prototype ([D-007](decisions.md#d-007)). The protocol stays panel-agnostic so it can be added later.
+
+### Panel driver requirements for grey mode
+
+The driver isn't written yet (the firmware uses `NullPanel`). For [D-018](decisions.md#d-018) it needs:
+- a 4-grey full refresh for full frames: Waveshare's C demo has `EPD_7IN5_V2_Init_4Gray` and a 4-grey display routine with their own LUTs. Whether the `epd-waveshare` crate's `epd7in5_v2` supports 4 greys is *(to verify, likely not)*, so the init and LUTs may have to be ported;
+- a black/white partial refresh for partial frames, which must leave unchanged grey pixels alone, e.g. by writing the same black/white value into the controller's old and new RAM for them *(to verify)*;
+- memory: two 96 KB buffers on the ESP32-S3. Check `free_heap` in the status message after boot.
 
 ## Controller: two routes
 
@@ -61,7 +69,7 @@ These avoid the strapping pins (0, 3, 45, 46), the USB pins (19, 20) and the pin
 
 - **Raw panel**: Eckstein WS13187, "7.5inch E-Ink Raw Display 800x480", €57.11 including VAT, about 8–10 days delivery *(verified, 2026-11-09)*. The listing's reviews from 2017/18 claim there's no partial refresh. They predate the 800×480 panel and are considered outdated.
 - **Driver board**: €14.90 at Berrybase, 1–3 days delivery (from the user's research).
-  - MCU: ESP32-WROOM-32 without PSRAM *(to verify)*. 520 KB SRAM is plenty for a 48 KB 1-bit frame or a 96 KB 2-bit frame.
+  - MCU: ESP32-WROOM-32 without PSRAM *(to verify)*. The firmware now keeps a 96 KB 2bpp framebuffer plus a 96 KB WebSocket receive buffer ([D-018](decisions.md#d-018)). Whether both fit next to Wi-Fi and TLS without PSRAM is *(to verify)*.
   - Pin mapping: GxEPD2's examples include this board and serve as a reference for our Rust pin config *(to verify)*.
   - Has an **A/B switch** for the panel's driving resistor. Check the Waveshare wiki for the 7.5" V2 before the first power-on *(to verify)*.
 - Pros: no wiring, one compact board, tidy in a frame. Cons: ~€72 total, and the less powerful MCU.

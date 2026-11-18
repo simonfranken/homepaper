@@ -147,7 +147,8 @@ func (s *session) update(ctx context.Context) error {
 		len(regions) > maxRegions ||
 		float64(area) > maxPartialShare*float64(next.W*next.H) ||
 		s.partials >= st.FullRefreshEvery ||
-		time.Since(s.lastFull) > st.FullRefreshAfter
+		time.Since(s.lastFull) > st.FullRefreshAfter ||
+		changedGrey(s.shown, next, regions)
 	if full {
 		return s.send(ctx, frame.KindFull, next.Full(), next)
 	}
@@ -161,6 +162,18 @@ func (s *session) update(ctx context.Context) error {
 		}
 	}
 	return nil
+}
+
+// changedGrey reports whether any changed pixel is grey before or after. A
+// 2bpp panel refreshes grey only with a full refresh; partial refreshes are
+// black/white (D-018).
+func changedGrey(prev, next *frame.Bitmap, regions []frame.Region) bool {
+	for _, r := range regions {
+		if frame.ChangedGrey(prev, next, r) {
+			return true
+		}
+	}
+	return false
 }
 
 // send transmits one region of next and waits for the device's ack.

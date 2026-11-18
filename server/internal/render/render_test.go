@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"homepaper/internal/frame"
 	"homepaper/internal/ha"
 	"homepaper/internal/store"
 )
@@ -73,6 +74,11 @@ func heroLayout(dividers string) store.Layout {
 	return l
 }
 
+func greyLayout(l store.Layout) store.Layout {
+	l.Greys = true
+	return l
+}
+
 // The renderer draws the approved mockups pixel for pixel.
 func TestGolden(t *testing.T) {
 	calm := demoStates(t)
@@ -85,6 +91,9 @@ func TestGolden(t *testing.T) {
 		{"hero-rules.png", heroLayout(""), demoStates(t)},
 		{"hero-frames.png", heroLayout(store.DividersFrames), demoStates(t)},
 		{"hero-calm.png", heroLayout(store.DividersRules), calm},
+		{"grey-hero-rules.png", greyLayout(heroLayout("")), demoStates(t)},
+		{"grey-hero-frames.png", greyLayout(heroLayout(store.DividersFrames)), demoStates(t)},
+		{"grey-hero-calm.png", greyLayout(heroLayout(store.DividersRules)), calm},
 	}
 	for _, tc := range cases {
 		t.Run(tc.file, func(t *testing.T) {
@@ -213,20 +222,26 @@ func TestEveryKindEverySize(t *testing.T) {
 			name   string
 			states *ha.Store
 		}{{"present", present}, {"gone", gone}} {
-			for w := k.MinW; w <= 8; w++ {
-				for h := k.MinH; h <= 6; h++ {
-					l := store.Layout{Cols: 8, Rows: 6, Widgets: []store.Widget{{ID: "x", Kind: k.Name, X: 0, Y: 0, W: w, H: h, Options: opts[k.Name]}}}
-					g := Render(l, store.DefaultPanel, st.states, goldenNow).ToGray()
-					cw, ch := w*100, h*80
-					for y := 0; y < 480; y++ {
-						for x := 0; x < 800; x++ {
-							if g.GrayAt(x, y).Y == 0 && (x > cw || y > ch) {
-								t.Fatalf("%s %dx%d (%s): ink outside the cell at %d,%d", k.Name, w, h, st.name, x, y)
+			for _, greys := range []bool{false, true} {
+				for w := k.MinW; w <= 8; w++ {
+					for h := k.MinH; h <= 6; h++ {
+						l := store.Layout{Cols: 8, Rows: 6, Greys: greys, Widgets: []store.Widget{{ID: "x", Kind: k.Name, X: 0, Y: 0, W: w, H: h, Options: opts[k.Name]}}}
+						g := Render(l, store.DefaultPanel, st.states, goldenNow).ToGray()
+						cw, ch := w*100, h*80
+						for y := 0; y < 480; y++ {
+							for x := 0; x < 800; x++ {
+								if g.GrayAt(x, y).Y != 0xFF && (x > cw || y > ch) {
+									t.Fatalf("%s %dx%d (%s, greys %v): ink outside the cell at %d,%d", k.Name, w, h, st.name, greys, x, y)
+								}
 							}
 						}
-					}
-					if outDir != "" && (w <= 4 && h <= 3) {
-						writePNG(t, filepath.Join(outDir, fmt.Sprintf("%s-%s-%dx%d.png", k.Name, st.name, w, h)), g)
+						if outDir != "" && (w <= 4 && h <= 3) {
+							name := fmt.Sprintf("%s-%s-%dx%d.png", k.Name, st.name, w, h)
+							if greys {
+								name = "grey-" + name
+							}
+							writePNG(t, filepath.Join(outDir, name), g)
+						}
 					}
 				}
 			}
@@ -470,5 +485,77 @@ func TestDepartures(t *testing.T) {
 	g := Render(l, store.DefaultPanel, st, now).ToGray()
 	if dir := os.Getenv("HOMEPAPER_RENDER_OUT"); dir != "" {
 		writePNG(t, filepath.Join(dir, "departures.png"), g)
+	}
+}
+
+// Grey mode keeps grey off everything that changes with entity state or
+// time, so routine updates stay black/white partial refreshes (D-018).
+func TestGreyRoutineChangesStayBlackWhite(t *testing.T) {
+	l := greyLayout(heroLayout(""))
+	st := demoStates(t)
+	base := Render(l, store.DefaultPanel, st, goldenNow)
+	if !base.HasGrey() {
+		t.Fatal("grey mode drew no grey")
+	}
+	changes := []struct {
+		name string
+		do   func(st *ha.Store) time.Time
+	}{
+		{"minute tick", func(*ha.Store) time.Time { return goldenNow.Add(time.Minute) }},
+		{"ten minutes", func(*ha.Store) time.Time { return goldenNow.Add(17 * time.Minute) }},
+		{"power", func(st *ha.Store) time.Time { setState(st, "sensor.power_consumption", "1088"); return goldenNow }},
+		{"temperature", func(st *ha.Store) time.Time { setState(st, "sensor.living_room_temperature", "19.9"); return goldenNow }},
+		{"light off", func(st *ha.Store) time.Time { setState(st, "light.living_room", "off"); return goldenNow }},
+		{"light dimmed", func(st *ha.Store) time.Time {
+			e, _ := st.Get("light.hallway")
+			e.Attributes = map[string]any{"friendly_name": "Hallway", "brightness": 40.0}
+			st.Set(e.ID, &e)
+			return goldenNow
+		}},
+	}
+	for _, c := range changes {
+		t.Run(c.name, func(t *testing.T) {
+			st := demoStates(t)
+			now := c.do(st)
+			next := Render(l, store.DefaultPanel, st, now)
+			regions := frame.Diff(base, next)
+			if len(regions) == 0 {
+				t.Fatal("nothing changed")
+			}
+			for _, r := range regions {
+				if frame.ChangedGrey(base, next, r) {
+					t.Fatalf("region %v changes grey pixels", r)
+				}
+			}
+		})
+	}
+
+	// An alert widget turning black or back is the one routine change that
+	// touches grey (its label, the rules beside it). It is rare, and the
+	// large black plate is better served by a full refresh anyway.
+	st = demoStates(t)
+	setState(st, "binary_sensor.bathroom_window", "off")
+	next := Render(l, store.DefaultPanel, st, goldenNow)
+	grey := false
+	for _, r := range frame.Diff(base, next) {
+		grey = grey || frame.ChangedGrey(base, next, r)
+	}
+	if !grey {
+		t.Fatal("leaving the alert state should count as a grey change (full refresh)")
+	}
+}
+
+// Without grey mode, and on 1bpp panels, the frame is pure black and white.
+func TestGreyModeOffIsBlackWhite(t *testing.T) {
+	st := demoStates(t)
+	if b := Render(heroLayout(""), store.DefaultPanel, st, goldenNow); b.Depth != 2 || b.HasGrey() {
+		t.Fatalf("2bpp with grey mode off: depth %d, grey %v", b.Depth, b.HasGrey())
+	}
+	p := store.DefaultPanel
+	p.Format = frame.Format1bpp
+	b1 := Render(greyLayout(heroLayout("")), p, st, goldenNow)
+	b2 := Render(heroLayout(""), store.DefaultPanel, st, goldenNow)
+	if b1.Depth != 1 || countDiff(b1.ToGray(), b2.ToGray()) != 0 {
+		t.Fatal("a 1bpp panel must ignore grey mode and match the 2bpp black/white frame")
 	}
 }

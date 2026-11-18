@@ -29,6 +29,7 @@ When an item changes status, update it here (status, date, rationale) and in the
 | [D-015](#d-015) | Panel redesign: widgets, rules, inversion | Decided, implemented |
 | [D-016](#d-016) | Login only via Home Assistant; one global HA connection from the environment | Decided, implemented |
 | [D-017](#d-017) | Login details: shared displays, admins only by default, auth off only for development | Decided, implemented |
+| [D-018](#d-018) | Grey mode: 2bpp frames with hybrid refresh, optional per display | Decided, implemented |
 | [P-001](#p-001) | ~~Server stack: TypeScript / Node~~ | Superseded by D-009, D-010 |
 | [P-002](#p-002) | ~~Renderer: Satori + resvg~~ | Superseded by D-011 |
 | [P-003](#p-003) | Layout model: snap grid (e.g. 8×6) | Proposed |
@@ -45,7 +46,7 @@ When an item changes status, update it here (status, date, rationale) and in the
 | [P-013](#p-013) | Fonts: Lucida Sans bitmaps for small text, Go fonts for large | Proposed |
 | [O-001](#o-001) | ~~Hardware route~~ | Answered by P-008 |
 | [O-002](#o-002) | ~~Is an ESP32-S3 dev board on hand?~~ | Answered: yes |
-| [O-003](#o-003) | Grey mode (4 levels) | Open |
+| [O-003](#o-003) | ~~Grey mode (4 levels)~~ | Answered by D-018 |
 | [O-004](#o-004) | Home Assistant add-on packaging | Open |
 | [O-005](#o-005) | Battery / HTTP polling mode | Open |
 
@@ -106,7 +107,7 @@ When an item changes status, update it here (status, date, rationale) and in the
 **One design language for the web UI and the panel** (2026-11-16). The project owner approved the web UI design. Rationale: the panel can only show 1-bit black and white, so the web UI takes its rules from the panel and doesn't invent a second look:
 - the same type scale (12/14/17/20/25/34) and the same family: Go fonts in the UI, matching the panel's Lucida bitmaps;
 - 2 px ink strokes and an 8 px radius;
-- patterns instead of greys;
+- patterns instead of greys (on the panel, grey mode relaxes this for static content, [D-018](#d-018));
 - status shown by fill, not colour.
 
 One functional accent, editor blue, marks only what never reaches the panel. Details in [design.md](design.md#shared-language-d-014).
@@ -149,6 +150,14 @@ Built on the 8 × 6 grid, which is still [P-003](#p-003). Details and mockups in
 - **Who may log in:** `HOMEPAPER_LOGIN=admins` (default: HA administrators and the owner) or `users` (every HA user). Others get a "No access" page; their HA login is revoked too.
 - **Development and demo:** `HOMEPAPER_AUTH=off` turns the login off, with a warning in the log. Only then may `HA_URL` be empty, which shows demo entities (`make demo`). With the login on, the server refuses to start without `HA_URL` and `HA_TOKEN`.
 
+### D-018
+**Grey mode: 2bpp frames with hybrid refresh, optional per display** (2026-11-18, answers [O-003](#o-003)). The panel shows 4 grey levels, but only with a full refresh (2.1 s, flashes); partial refresh (0.4 s) is black/white only (verified on Waveshare's product page). The project owner chose a hybrid over a grey-only mode, and wanted it optional:
+- **Format:** the firmware reports `2bpp`, so every frame is 2bpp (0 black … 3 white). The header version stays 1; 1bpp devices keep working. See [device-protocol.md](device-protocol.md#frames-server--device-binary).
+- **Refresh rule:** a change whose changed pixels are all black/white goes out as a partial refresh; a change to any grey pixel, before or after, triggers a full 4-grey refresh (`frame.ChangedGrey`). Unchanged grey inside a changed band doesn't count.
+- **Design rule:** grey only for pixels that don't change with entity state or time: labels, rules and frames, the clock and thermostat dividers, the date, forecast days, weather icon bodies, small fixed icons. Values, units, state words and icons, meters and alert plates stay black. An alert widget turning black or back is the one routine change that costs a full refresh. See [design.md](design.md#panel-in-4-greys-d-018).
+- **Optional:** a per-layout switch (`Layout.Greys`, "Colours: Black/white | 4 greys" in the editor toolbar), off by default. It has no effect on 1bpp panels. With it off, a 2bpp panel gets pure black/white frames.
+- **Not verified on hardware:** that a black/white partial refresh leaves the greys elsewhere on the panel intact, and that two 96 KB buffers (framebuffer and WebSocket receive buffer) fit the ESP32-S3's internal RAM next to Wi-Fi and TLS. The panel driver isn't written yet (`NullPanel`).
+
 ## Proposed
 
 These are recommended defaults. The project owner hasn't confirmed them yet.
@@ -180,7 +189,7 @@ These are recommended defaults. The project owner hasn't confirmed them yet.
 **Hardware: route A**, the Waveshare 7.5" e-Paper HAT kit (SKU 13504) jumpered to the owner's ESP32-S3 dev board. This follows the recommendation once the owner said they have an S3 (2026-11-10). It's to be confirmed when ordering. See [hardware.md](hardware.md#controller-two-routes).
 
 ### P-009
-**Frame format and protocol v1** as specified in [device-protocol.md](device-protocol.md): a 16-byte little-endian header, 1bpp with MSB = left and bit set = white, regions aligned to 8 px, acks carrying a framebuffer CRC-32, and flow control through acks. Implemented and tested with the Go fake device (2026-11-10). Not yet tested on hardware.
+**Frame format and protocol v1** as specified in [device-protocol.md](device-protocol.md): a 16-byte little-endian header, 1bpp with MSB = left and bit set = white (2bpp added by [D-018](#d-018)), regions aligned to 8 px, acks carrying a framebuffer CRC-32, and flow control through acks. Implemented and tested with the Go fake device (2026-11-10). Not yet tested on hardware.
 
 ### P-010
 **Device setup via a SoftAP portal.** The device opens an open access point `homepaper-setup` with a form at `http://192.168.71.1` in three cases:
@@ -221,6 +230,8 @@ The raw panel alone **can't** be jumpered to a dev board. See [hardware.md](hard
 
 ### O-003
 **Grey mode (4 levels, 2bpp).** The panel supports it (2.1 s refresh), but not with partial refresh. It could be a per-device option for nicer images.
+
+*Answered by [D-018](#d-018) on 2026-11-18.* The user favoured a hybrid: frames are 2bpp, changes that touch only black/white pixels go out as partial refreshes, and any change to a grey pixel triggers a 4-grey full refresh. Grey is reserved for pixels that don't change with entity state or time. Mockups: [design.md](design.md#panel-in-4-greys-d-018). Mixing B/W partials with a grey image is unverified on hardware.
 
 ### O-004
 **Home Assistant add-on.** It would provide ingress and HA authentication for free. Considered after the Docker version works.

@@ -9,6 +9,7 @@ Built and tested **without a panel**:
 - **Editor UI:** tested in headless Chromium and in Chrome against a real HA. Reworked on 2026-11-11 (tested in Chrome with demo data and `fakedevice`): displays as tabs with a Layout/Display switch, a searchable entity picker, undo/redo, keyboard moves and resizing, flags for widgets without an entity, a guided connect flow. The HA settings dialog was replaced on 2026-11-17 by the login via Home Assistant ([D-016](decisions.md#d-016)).
 - **Firmware:** setup portal, Wi-Fi, WebSocket, framebuffer, acks, `NullPanel` with ASCII-art output. It compiles, but **hasn't run on the ESP32-S3 yet**. The setup portal's prefill link (2026-11-11) is untested on hardware too.
 - **Protocol:** verified end to end with `server/cmd/fakedevice`.
+- **Grey mode (2026-11-18):** 2bpp frames with hybrid refresh, optional per display ([D-018](decisions.md#d-018)). Verified with `fakedevice` (grey changes go out as full frames, routine updates as partial ones); the editor toggle and the live preview's 2bpp decoding are not yet checked in a browser, and nothing is tested on the panel.
 
 - **Design (2026-11-16):** the panel redesign ([D-015](decisions.md#d-015)) is rendered, with daily forecasts from Home Assistant. The web UI follows the shared design language ([D-014](decisions.md#d-014)). Tested with demo data, `fakedevice` and headless Chromium.
 
@@ -57,4 +58,4 @@ Next: flash the S3 and check the connection and setup on real hardware, then ord
 
 ## Later
 
-- A grey mode ([O-003](decisions.md#o-003)), color panels, an HA add-on ([O-004](decisions.md#o-004)), a battery/polling mode ([O-005](decisions.md#o-005)), over-the-air firmware updates, more widgets, interaction.
+- Color panels, an HA add-on ([O-004](decisions.md#o-004)), a battery/polling mode ([O-005](decisions.md#o-005)), over-the-air firmware updates, more widgets, interaction.

@@ -43,10 +43,15 @@ func (c *ctx) missing(r R, label string) {
 		total += 12 + note
 	}
 	x := c.alignX(r, total)
-	c.T(unavailable, fontBold, px, x, base, 0)
-	if withNote {
-		c.T("Not available", fontRegular, 14, x+w+12, base, 0)
+	if c.greys() && !small(r) {
+		c.hatch(r, R{x - 6, base - capH(f) - 8, total + 12, capH(f) + 16})
 	}
+	c.tone(toneDark, func() {
+		c.T(unavailable, fontBold, px, x, base, 0)
+		if withNote {
+			c.T("Not available", fontRegular, 14, x+w+12, base, 0)
+		}
+	})
 }
 
 // ---------- temperature ----------
@@ -91,7 +96,7 @@ func renderTemperature(c *ctx, r R) {
 		y := r.bottom() - 2
 		txt := formatNumber(hum.State, 0) + " %"
 		x := c.alignX(r, 18+width(f, txt))
-		c.droplet(float64(x+6), float64(y-capH(f)/2-1), 14)
+		c.toneIf(c.ax == 0, toneDark, func() { c.droplet(float64(x+6), float64(y-capH(f)/2-1), 14) })
 		c.T(txt, fontRegular, 17, x+18, y, 0)
 	}
 	c.bigNumber(main, whole, frac, 80, c.ax)
@@ -185,7 +190,8 @@ func renderValue(c *ctx, r R) {
 	val = ellip(val, fontBold, px, room)
 	x = c.alignX(r, iconW+width(fb, val)+uw)
 	if icon != nil {
-		icon(c, float64(x)+s/2, float64(r.Y)+float64(r.H)/2, s)
+		// Left-aligned, the icon never moves, so it may be grey.
+		c.toneIf(c.ax == 0, toneDark, func() { icon(c, float64(x)+s/2, float64(r.Y)+float64(r.H)/2, s) })
 		x += iconW
 	}
 	x += c.T(val, fontBold, px, x, base, 0)
@@ -276,10 +282,12 @@ func renderClimate(c *ctx, r R) {
 	whole, frac := splitNum(cur)
 	c.bigNumber(R{r.X, r.Y, r.W - col, r.H}, whole, frac, 88, 0)
 	rx := r.right() - col + 16
-	c.vline(rx-16, r.Y+4, r.bottom()-4, 2)
 	ft := face(fontMedium, 17)
 	y := r.Y + capH(ft) + 6
-	c.T("Set to", fontMedium, 17, rx, y, 0)
+	c.tone(toneDark, func() {
+		c.vline(rx-16, r.Y+4, r.bottom()-4, 2)
+		c.T("Set to", fontMedium, 17, rx, y, 0)
+	})
 	tpx := fit(target, fontBold, []int{34, 25, 20}, col-16, r.H)
 	y += capH(face(fontBold, tpx)) + 12
 	c.T(target, fontBold, tpx, rx, y, 0)
@@ -365,7 +373,7 @@ func renderWeather(c *ctx, r R) {
 		}
 	}
 	s := math.Min(float64(top.H), float64(r.W)*0.32)
-	weatherIcon(c.dc, e.State, float64(top.X)+s/2, float64(top.Y)+float64(top.H)/2, s)
+	c.weatherIcon(e.State, float64(top.X)+s/2, float64(top.Y)+float64(top.H)/2, s)
 	x := top.X + int(s) + 10
 	px := 64
 	if top.H < 70 {
@@ -392,16 +400,16 @@ func renderWeather(c *ctx, r R) {
 		lines = append(lines, func(y int) { c.T(ellip(cond, fontBold, 20, avail), fontBold, 20, x, y, 0) })
 		if today != nil {
 			lines = append(lines, func(y int) {
-				c.tri(float64(x+5), float64(y-capH(fr)/2), 10, -1)
+				c.tone(toneDark, func() { c.tri(float64(x+5), float64(y-capH(fr)/2), 10, -1) })
 				xx := x + 14
 				xx += c.T(deg(today.Temperature), fontRegular, 17, xx, y, 0)
-				c.tri(float64(xx+12), float64(y-capH(fr)/2), 10, 1)
+				c.tone(toneDark, func() { c.tri(float64(xx+12), float64(y-capH(fr)/2), 10, 1) })
 				c.T(deg(today.TempLow), fontRegular, 17, xx+21, y, 0)
 			})
 		}
 		if hasHum && top.H >= 70 {
 			lines = append(lines, func(y int) {
-				c.droplet(float64(x+5), float64(y-capH(fr)/2), 12)
+				c.tone(toneDark, func() { c.droplet(float64(x+5), float64(y-capH(fr)/2), 12) })
 				c.T(fmt.Sprintf("%.0f %%", hum), fontRegular, 17, x+14, y, 0)
 			})
 		}
@@ -427,8 +435,8 @@ func renderWeather(c *ctx, r R) {
 		f14 := face(fontBold, 14)
 		for i, d := range next[:days] {
 			cx := r.X + i*cw + cw/2
-			c.T(d.Datetime.In(c.now.Location()).Format("Mon"), fontBold, 14, cx, y0+8+capH(f14), 0.5)
-			weatherIcon(c.dc, d.Condition, float64(cx), float64(y0+35), 26)
+			c.tone(toneDark, func() { c.T(d.Datetime.In(c.now.Location()).Format("Mon"), fontBold, 14, cx, y0+8+capH(f14), 0.5) })
+			c.weatherIcon(d.Condition, float64(cx), float64(y0+35), 26)
 			hs, ls := deg(d.Temperature), " "+deg(d.TempLow)
 			hw, lw := width(face(fontBold, 14), hs), width(face(fontRegular, 14), ls)
 			xx := cx - (hw+lw)/2
@@ -483,7 +491,9 @@ func renderLights(c *ctx, r R) {
 		summary = "All off"
 	}
 	sw := width(face(fontBold, 17), summary)
-	c.T(ellip(c.str("label", "Lights"), fontMedium, 17, r.W-sw-12), fontMedium, 17, r.X, r.Y+capH(f17), 0)
+	c.tone(toneDark, func() {
+		c.T(ellip(c.str("label", "Lights"), fontMedium, 17, r.W-sw-12), fontMedium, 17, r.X, r.Y+capH(f17), 0)
+	})
 	c.T(summary, fontBold, 17, r.right(), r.Y+capH(f17), 1)
 	r = R{r.X, r.Y + capH(f17) + 10, r.W, r.H - capH(f17) - 10}
 	if len(ls) == 0 {
@@ -826,7 +836,8 @@ func renderClock(c *ctx, r R) {
 		tf := face(fontBold, tpx)
 		c.T(timeS, fontBold, tpx, x, r.Y+(r.H+capH(tf))/2, 0)
 		if withDate {
-			c.vline(x+tw+9, r.Y+6, r.bottom()-6, 2)
+			// Clock digits have equal widths, so the rule never moves.
+			c.tone(toneDark, func() { c.vline(x+tw+9, r.Y+6, r.bottom()-6, 2) })
 		}
 	}
 	if withDate {
@@ -834,7 +845,7 @@ func renderClock(c *ctx, r R) {
 		y := r.Y + (r.H-blockH)/2 + capH(fb)
 		bx := R{x + dateX, r.Y, dw, r.H}
 		c.T(day, fontBold, 20, c.alignX(bx, width(fb, day)), y, 0)
-		c.T(date, fontRegular, 17, c.alignX(bx, width(fr, date)), y+10+capH(fr), 0)
+		c.tone(toneDark, func() { c.T(date, fontRegular, 17, c.alignX(bx, width(fr, date)), y+10+capH(fr), 0) })
 	}
 }
 
@@ -865,11 +876,13 @@ func renderText(c *ctx, r R) {
 		w := width(f, s)
 		x := c.alignX(r, w)
 		c.T(s, fontBold, 25, x, base, 0)
-		if x+w+12+24 <= r.right() {
-			c.hline(x+w+12, r.right(), mid, 2)
-		}
-		if x-12-24 >= r.X {
-			c.hline(r.X, x-12, mid, 2)
-		}
+		c.tone(toneDark, func() {
+			if x+w+12+24 <= r.right() {
+				c.hline(x+w+12, r.right(), mid, 2)
+			}
+			if x-12-24 >= r.X {
+				c.hline(r.X, x-12, mid, 2)
+			}
+		})
 	}
 }

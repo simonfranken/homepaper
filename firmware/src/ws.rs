@@ -1,7 +1,7 @@
 //! WebSocket client over the C `esp_websocket_client` component.
 //!
 //! The safe `esp_idf_svc::ws::client` wrapper is not used because it drops
-//! `payload_offset`/`payload_len`, so a 48 KB binary frame (which arrives in
+//! `payload_offset`/`payload_len`, so a 96 KB binary frame (which arrives in
 //! many WEBSOCKET_EVENT_DATA chunks) could not be reassembled. Same reasoning
 //! as fader-control's `dealer.rs`.
 //!

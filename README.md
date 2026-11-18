@@ -11,7 +11,7 @@ homepaper has two components:
 1. **Server** (Go + Vue 3): a self-hosted web app that
    - connects to Home Assistant and keeps entity states up to date;
    - offers a web UI where you place **widgets** (temperature, weather, sensors, lights, thermostats, …) on a grid and bind them to HA entities;
-   - renders each layout into a 1-bit bitmap for the panel;
+   - renders each layout into a panel-ready bitmap (black/white, or 4 greys as an option);
    - pushes only what changed to devices over a WebSocket.
 2. **Device** (Rust on ESP32-S3): connects to its configured server URL, receives prerendered frames and draws them. It does no layout or rendering of its own.
 
@@ -102,7 +102,7 @@ The web UI shows the device as online and *in sync* once its framebuffer checksu
 
 ```sh
 cd server && make fakedevice
-./bin/fakedevice -id <device-id> -token <token> -png frame.png
+./bin/fakedevice -id <device-id> -token <token> -png frame.png   # -format 1bpp for a black/white panel
 ```
 
 This speaks the device protocol like the firmware, and writes what a panel would show to `frame.png`.

@@ -44,6 +44,54 @@ type M struct {
 	img   *image.RGBA
 	fg    color.Gray // current ink
 	style Style
+	// grey mode (2bpp, D-018 draft): tones[1] is dark grey, tones[2] light
+	// grey. Each is a coverage layer: whatever is drawn black on it becomes
+	// that grey, unless the ink layer is black there. Ink always wins.
+	grey  bool
+	tones [3]*gg.Context
+}
+
+// Grey levels of the 2bpp panel, as shown in the PNGs.
+const (
+	toneDark  = 1
+	toneLight = 2
+)
+
+var greyPalette = color.Palette{color.Gray{0}, color.Gray{0x55}, color.Gray{0xAA}, color.Gray{0xFF}}
+
+func newGreyM(style Style) *M {
+	m := newM(style)
+	m.grey = true
+	for _, t := range []int{toneDark, toneLight} {
+		dc := gg.NewContext(PW, PH)
+		dc.SetColor(color.White)
+		dc.Clear()
+		m.tones[t] = dc
+	}
+	return m
+}
+
+// tone runs f with drawing redirected to a grey layer. In 1-bit mode, or on
+// inverted widgets, f draws in normal ink, so the 1-bit images stay as they
+// were. Grey is only for pixels that don't change with entity state or time.
+func (m *M) tone(level int, f func()) {
+	if !m.grey || m.fg.Y != 0 {
+		f()
+		return
+	}
+	dc, img := m.dc, m.img
+	m.dc, m.img = m.tones[level], m.tones[level].Image().(*image.RGBA)
+	f()
+	m.dc, m.img = dc, img
+}
+
+// toneOr draws f on a grey layer in grey mode and alt in 1-bit mode.
+func (m *M) toneOr(level int, f, alt func()) {
+	if m.grey && m.fg.Y == 0 {
+		m.tone(level, f)
+	} else {
+		alt()
+	}
 }
 
 func newM(style Style) *M {
@@ -117,7 +165,7 @@ func (m *M) label(r R, s string) R {
 	}
 	s = ellip(s, fontMedium, px, r.W)
 	f := face(fontMedium, px)
-	m.T(s, fontMedium, px, r.X, r.Y+capH(f), 0)
+	m.tone(toneDark, func() { m.T(s, fontMedium, px, r.X, r.Y+capH(f), 0) })
 	used := capH(f) + 9
 	return R{r.X, r.Y + used, r.W, r.H - used}
 }
@@ -178,9 +226,11 @@ func (m *M) vline(x, y0, y1, t int) { m.fillRect(R{x, y0, t, y1 - y0}, m.fg.Y) }
 
 // dotted 1 px line, one pixel on, two off.
 func (m *M) dotted(x0, x1, y int) {
-	for x := x0; x < x1; x += 3 {
-		m.img.Set(x, y, m.fg)
-	}
+	m.toneOr(toneLight, func() { m.hline(x0, x1, y, 2) }, func() {
+		for x := x0; x < x1; x += 3 {
+			m.img.Set(x, y, m.fg)
+		}
+	})
 }
 
 // bar is a 2 px outlined meter, filled to frac.
@@ -389,7 +439,7 @@ func temperature(label, whole, frac, hum string) func(*M, R) {
 		if r.W < 120 {
 			// 1×1: smaller label, value only.
 			f := face(fontMedium, 14)
-			m.T(ellip(label, fontMedium, 14, r.W), fontMedium, 14, r.X, r.Y+capH(f), 0)
+			m.tone(toneDark, func() { m.T(ellip(label, fontMedium, 14, r.W), fontMedium, 14, r.X, r.Y+capH(f), 0) })
 			m.bigNumber(R{r.X, r.Y + capH(f) + 6, r.W, r.H - capH(f) - 6}, whole, frac, 34, 0)
 			return
 		}
@@ -411,7 +461,7 @@ func value(label, val, unit string, icon func(m *M, cx, cy, s float64)) func(*M,
 		small := r.W < 120
 		if small {
 			f := face(fontMedium, 14)
-			m.T(ellip(label, fontMedium, 14, r.W), fontMedium, 14, r.X, r.Y+capH(f), 0)
+			m.tone(toneDark, func() { m.T(ellip(label, fontMedium, 14, r.W), fontMedium, 14, r.X, r.Y+capH(f), 0) })
 			r = R{r.X, r.Y + capH(f) + 6, r.W, r.H - capH(f) - 6}
 		} else {
 			r = m.label(r, label)
@@ -465,10 +515,10 @@ func thermostat(label, cur, target, action string) func(*M, R) {
 		w, fr := splitNum(cur)
 		m.bigNumber(left, w, fr, 88, 0)
 		rx := r.right() - col + 16
-		m.vline(rx-16, r.Y+4, r.bottom()-4, 2)
+		m.tone(toneDark, func() { m.vline(rx-16, r.Y+4, r.bottom()-4, 2) })
 		ft := face(fontMedium, 17)
 		y := r.Y + capH(ft) + 6
-		m.T("Set to", fontMedium, 17, rx, y, 0)
+		m.tone(toneDark, func() { m.T("Set to", fontMedium, 17, rx, y, 0) })
 		fb := face(fontBold, 34)
 		y += capH(fb) + 12
 		m.T(target, fontBold, 34, rx, y, 0)
@@ -505,7 +555,7 @@ func weather(cond, condLabel string, temp, hi, lo, hum int, fc []day) func(*M, R
 			top = R{r.X, r.Y, r.W, r.H - 64}
 		}
 		s := math.Min(float64(top.H), float64(r.W)*0.32)
-		weatherIcon(m.dc, cond, float64(top.X)+s/2, float64(top.Y)+float64(top.H)/2, s)
+		m.weatherIcon(cond, float64(top.X)+s/2, float64(top.Y)+float64(top.H)/2, s)
 		x := top.X + int(s) + 10
 		tf := face(fontBold, 64)
 		if top.H < 70 {
@@ -537,14 +587,14 @@ func weather(cond, condLabel string, temp, hi, lo, hum int, fc []day) func(*M, R
 			y := top.Y + (top.H-total)/2 + capH(fb)
 			m.T(condLabel, fontBold, 20, x, y, 0)
 			y += capH(fr) + gap + 2
-			m.tri(float64(x+5), float64(y-capH(fr)/2), 10, -1)
+			m.tone(toneDark, func() { m.tri(float64(x+5), float64(y-capH(fr)/2), 10, -1) })
 			xx := x + 14
 			xx += m.T(fmt.Sprintf("%d°", hi), fontRegular, 17, xx, y, 0)
-			m.tri(float64(xx+12), float64(y-capH(fr)/2), 10, 1)
+			m.tone(toneDark, func() { m.tri(float64(xx+12), float64(y-capH(fr)/2), 10, 1) })
 			m.T(fmt.Sprintf("%d°", lo), fontRegular, 17, xx+21, y, 0)
 			if lines == 3 {
 				y += capH(fr) + gap
-				m.droplet(float64(x+5), float64(y-capH(fr)/2), 12)
+				m.tone(toneDark, func() { m.droplet(float64(x+5), float64(y-capH(fr)/2), 12) })
 				m.T(fmt.Sprintf("%d %%", hum), fontRegular, 17, x+14, y, 0)
 			}
 		}
@@ -555,8 +605,8 @@ func weather(cond, condLabel string, temp, hi, lo, hum int, fc []day) func(*M, R
 			for i, d := range fc {
 				cx := r.X + i*cw + cw/2
 				f14 := face(fontBold, 14)
-				m.T(d.name, fontBold, 14, cx, y0+8+capH(f14), 0.5)
-				weatherIcon(m.dc, d.cond, float64(cx), float64(y0+35), 26)
+				m.tone(toneDark, func() { m.T(d.name, fontBold, 14, cx, y0+8+capH(f14), 0.5) })
+				m.weatherIcon(d.cond, float64(cx), float64(y0+35), 26)
 				hs, ls := fmt.Sprintf("%d°", d.hi), fmt.Sprintf(" %d°", d.lo)
 				hw, lw := width(face(fontBold, 14), hs), width(face(fontRegular, 14), ls)
 				xx := cx - (hw+lw)/2
@@ -582,7 +632,7 @@ func lights(heading string, ls []light, bars bool) func(*M, R) {
 			}
 		}
 		f17 := face(fontMedium, 17)
-		m.T(heading, fontMedium, 17, r.X, r.Y+capH(f17), 0)
+		m.tone(toneDark, func() { m.T(heading, fontMedium, 17, r.X, r.Y+capH(f17), 0) })
 		summary := fmt.Sprintf("%d of %d on", n, len(ls))
 		if n == 0 {
 			summary = "All off"
@@ -634,7 +684,7 @@ func state(label, word string, icon func(m *M, cx, cy, s float64)) func(*M, R) {
 	return func(m *M, r R) {
 		if r.W < 120 {
 			f := face(fontMedium, 14)
-			m.T(ellip(label, fontMedium, 14, r.W), fontMedium, 14, r.X, r.Y+capH(f), 0)
+			m.tone(toneDark, func() { m.T(ellip(label, fontMedium, 14, r.W), fontMedium, 14, r.X, r.Y+capH(f), 0) })
 			rest := R{r.X, r.Y + capH(f) + 6, r.W, r.H - capH(f) - 6}
 			px := fit(word, fontBold, []int{20, 17, 14}, rest.W-26, rest.H)
 			fb := face(fontBold, px)
@@ -667,12 +717,12 @@ func clock(timeS, dayS, dateS string, withTime bool) func(*M, R) {
 			if dayS == "" {
 				return
 			}
-			m.vline(x-9, r.Y+6, r.bottom()-6, 2)
+			m.tone(toneDark, func() { m.vline(x-9, r.Y+6, r.bottom()-6, 2) })
 		}
 		total := capH(fb) + 10 + capH(fr)
 		y := r.Y + (r.H-total)/2 + capH(fb)
 		m.T(dayS, fontBold, 20, x+4, y, 0)
-		m.T(dateS, fontRegular, 17, x+4, y+10+capH(fr), 0)
+		m.tone(toneDark, func() { m.T(dateS, fontRegular, 17, x+4, y+10+capH(fr), 0) })
 	}
 }
 
@@ -681,7 +731,7 @@ func heading(s string) func(*M, R) {
 		f := face(fontBold, 25)
 		base := r.Y + (r.H+capH(f))/2
 		w := m.T(s, fontBold, 25, r.X, base, 0)
-		m.hline(r.X+w+12, r.right(), base-capH(f)/2, 2)
+		m.tone(toneDark, func() { m.hline(r.X+w+12, r.right(), base-capH(f)/2, 2) })
 	}
 }
 
@@ -697,6 +747,35 @@ func unavailableW(label string) func(*M, R) {
 		r = m.label(r, label)
 		f := face(fontBold, 34)
 		base := r.Y + (r.H+capH(f))/2
+		if m.grey {
+			// A light grey hatch says "no data" without competing with values.
+			m.tone(toneLight, func() {
+				m.dc.SetRGB(0, 0, 0)
+				m.dc.SetLineWidth(2)
+				m.dc.Push()
+				m.dc.DrawRectangle(float64(r.X), float64(r.Y), float64(r.W), float64(r.H))
+				m.dc.Clip()
+				for x := r.X - r.H; x < r.right(); x += 10 {
+					m.dc.DrawLine(float64(x), float64(r.bottom()), float64(x+r.H), float64(r.Y))
+				}
+				m.dc.Stroke()
+				m.dc.ResetClip()
+				m.dc.Pop()
+			})
+			fs := face(fontRegular, 14)
+			tw := width(f, "–") + 12 + width(fs, "Not available")
+			// White plate behind the words so the hatch doesn't run through them.
+			m.fillRect(R{r.X, base - capH(f) - 8, tw + 12, capH(f) + 16}, 255)
+			for _, t := range []int{toneLight} {
+				tl := m.tones[t].Image().(*image.RGBA)
+				draw.Draw(tl, image.Rect(r.X, base-capH(f)-8, r.X+tw+12, base+8), image.White, image.Point{}, draw.Src)
+			}
+			m.tone(toneDark, func() {
+				w := m.T("–", fontBold, 34, r.X, base, 0)
+				m.T("Not available", fontRegular, 14, r.X+w+12, base, 0)
+			})
+			return
+		}
 		w := m.T("–", fontBold, 34, r.X, base, 0)
 		m.T("Not available", fontRegular, 14, r.X+w+12, base, 0)
 	}
@@ -708,12 +787,49 @@ func (m *M) save(name string) {
 	gray := image.NewGray(image.Rect(0, 0, PW, PH))
 	draw.Draw(gray, gray.Bounds(), m.img, image.Point{}, draw.Src)
 	pal := color.Palette{color.Black, color.White}
+	if m.grey {
+		m.saveGrey(name, gray)
+		return
+	}
 	out := image.NewPaletted(gray.Bounds(), pal)
 	for y := 0; y < PH; y++ {
 		for x := 0; x < PW; x++ {
 			if gray.GrayAt(x, y).Y >= 128 {
 				out.SetColorIndex(x, y, 1)
 			}
+		}
+	}
+	f, err := os.Create(name)
+	if err != nil {
+		panic(err)
+	}
+	defer f.Close()
+	if err := png.Encode(f, out); err != nil {
+		panic(err)
+	}
+}
+
+// saveGrey composes ink and the two tone layers into a 2bpp PNG: black ink
+// wins, then dark grey, then light grey, else white. Every layer is
+// thresholded at 50 % coverage, so no anti-aliasing fringe turns grey.
+func (m *M) saveGrey(name string, ink *image.Gray) {
+	out := image.NewPaletted(ink.Bounds(), greyPalette)
+	dark := image.NewGray(ink.Bounds())
+	light := image.NewGray(ink.Bounds())
+	draw.Draw(dark, dark.Bounds(), m.tones[toneDark].Image(), image.Point{}, draw.Src)
+	draw.Draw(light, light.Bounds(), m.tones[toneLight].Image(), image.Point{}, draw.Src)
+	for y := 0; y < PH; y++ {
+		for x := 0; x < PW; x++ {
+			idx := uint8(3)
+			switch {
+			case ink.GrayAt(x, y).Y < 128:
+				idx = 0
+			case dark.GrayAt(x, y).Y < 128:
+				idx = 1
+			case light.GrayAt(x, y).Y < 128:
+				idx = 2
+			}
+			out.SetColorIndex(x, y, idx)
 		}
 	}
 	f, err := os.Create(name)
@@ -784,18 +900,7 @@ func main() {
 
 	// Exceptions: things unavailable, all lights off, door open, away.
 	m = newM(Rules)
-	m.layout([]W{
-		{R: cell(0, 0, 4, 1), Draw: clock("07:15", "Tuesday", "17 November", true)},
-		{R: cell(4, 0, 4, 2), Draw: weather("rainy", "Rain", 6, 9, 4, 94, forecast[1:])},
-		{R: cell(0, 1, 2, 2), Draw: temperature("Living room", "19", ".6°", "52")},
-		{R: cell(2, 1, 2, 2), Draw: unavailableW("Outdoor")},
-		{R: cell(0, 3, 4, 2), Draw: thermostat("Living room thermostat", "19.6°", "18.0°", "Idle")},
-		{R: cell(4, 2, 4, 3), Draw: lights("Lights", []light{{"Living room light", false, 0}, {"Kitchen light", false, 0}, {"Hallway", false, 0}}, true)},
-		{R: cell(0, 5, 2, 1), Alert: true, Draw: state("Front door", "Open", iDoor(true))},
-		{R: cell(2, 5, 2, 1), Draw: state("Bathroom window", "Closed", iWin(false))},
-		{R: cell(4, 5, 2, 1), Draw: state("Alex", "Away", iPerson(false))},
-		{R: cell(6, 5, 2, 1), Draw: value("Power", "88", "W", iBolt)},
-	})
+	m.layout(exceptionsLayout())
 	m.save(dir + "/exceptions.png")
 
 	// Specimen A: temperature, value, thermostat at their sizes.
@@ -819,23 +924,7 @@ func main() {
 
 	// Specimen B: weather, lights, state, clock, text.
 	m = newM(Rules)
-	m.layout([]W{
-		{R: cell(0, 0, 2, 1), Draw: weather("partlycloudy", "Partly cloudy", 8, 9, 3, 81, nil)},
-		{R: cell(2, 0, 4, 1), Draw: weather("partlycloudy", "Partly cloudy", 8, 9, 3, 81, nil)},
-		{R: cell(6, 0, 2, 1), Draw: clock("18:42", "", "", true)},
-		{R: cell(0, 1, 2, 2), Draw: weather("rainy", "Rain", 6, 9, 4, 94, nil)},
-		{R: cell(2, 1, 4, 2), Draw: weather("partlycloudy", "Partly cloudy", 8, 9, 3, 81, forecast)},
-		{R: cell(6, 1, 2, 1), Draw: lights("Lights", demoLights, false)},
-		{R: cell(6, 2, 2, 2), Draw: lights("Lights", demoLights, false)},
-		{R: cell(0, 3, 1, 1), Draw: state("Front door", "Closed", iDoor(false))},
-		{R: cell(1, 3, 1, 1), Alert: true, Draw: state("Window", "Open", iWin(true))},
-		{R: cell(2, 3, 2, 1), Draw: state("Front door", "Locked", func(m *M, cx, cy, s float64) { m.lock(cx, cy, s, true) })},
-		{R: cell(4, 3, 2, 1), Alert: true, Draw: state("Back door", "Unlocked", func(m *M, cx, cy, s float64) { m.lock(cx, cy, s, false) })},
-		{R: cell(0, 4, 4, 1), Draw: clock("18:42", "Monday", "16 November", true)},
-		{R: cell(4, 4, 4, 1), Draw: clock("", "Monday", "16 November 2026", false)},
-		{R: cell(0, 5, 2, 1), Draw: state("Alex", "Away", iPerson(false))},
-		{R: cell(2, 5, 6, 1), Draw: note("Bins go out tonight. Recycling and paper.")},
-	})
+	m.layout(specimenB())
 	m.save(dir + "/specimen-b.png")
 
 	// Type sheet: every size the panel has, both weights.
@@ -860,4 +949,102 @@ func main() {
 		x += w + 26
 	}
 	m.save(dir + "/type.png")
+
+	// 2bpp variants (D-018). The renderer owns grey-hero-*.png (TestGolden
+	// with -update writes them); these are the mockup-only ones.
+	m = newGreyM(Rules)
+	m.layout(exceptionsLayout())
+	m.save(dir + "/grey-exceptions.png")
+
+	m = newGreyM(Rules)
+	m.layout(specimenB())
+	m.save(dir + "/grey-specimen-b.png")
+
+	m = newGreyM(Bare)
+	greySheet(m)
+	m.save(dir + "/grey-rules.png")
+}
+
+// greySheet is the legend: the four levels and where each may be used.
+func greySheet(m *M) {
+	m.T("Four levels", fontBold, 25, 24, 44, 0)
+	names := []string{"Black", "Dark grey", "Light grey", "White"}
+	uses := []string{"values, units, state words, state icons, meters", "labels, rules, static icons", "row lines, cloud fills, hatch", "paper"}
+	for i := 0; i < 4; i++ {
+		x := 24 + i*190
+		r := R{x, 64, 170, 70}
+		switch i {
+		case 0:
+			m.fillRect(r, 0)
+		case 1, 2:
+			m.tone(i, func() { m.fillRect(r, 0) })
+		case 3:
+			m.hline(r.X, r.right(), r.Y, 2)
+			m.hline(r.X, r.right(), r.bottom()-2, 2)
+			m.vline(r.X, r.Y, r.bottom(), 2)
+			m.vline(r.right()-2, r.Y, r.bottom(), 2)
+		}
+		m.T(names[i], fontBold, 17, x, 160, 0)
+		for j, line := range strings.SplitAfter(uses[i], ", ") {
+			m.tone(toneDark, func() { m.T(strings.TrimRight(line, ", "), fontRegular, 14, x, 182+j*18, 0) })
+		}
+	}
+	m.tone(toneDark, func() { m.hline(24, PW-24, 252, 2) })
+	m.T("Black and white: changes often", fontBold, 20, 24, 290, 0)
+	m.T("Grey: changes rarely", fontBold, 20, 420, 290, 0)
+	left := []string{
+		"Fast partial refresh (0.4 s), no flash.",
+		"Clock, temperatures, power, light levels,",
+		"door and presence states, and anything",
+		"whose position follows a value (units, %).",
+	}
+	right := []string{
+		"Any change to a grey pixel costs a 4-grey",
+		"full refresh (2.1 s, flashes). Labels,",
+		"rules, frames, weather icons, date,",
+		"forecast days. The hourly full refresh",
+		"absorbs changes that come about that rarely.",
+	}
+	for i, l := range left {
+		m.T(l, fontRegular, 17, 24, 322+i*24, 0)
+	}
+	for i, l := range right {
+		m.tone(toneDark, func() { m.T(l, fontRegular, 17, 420, 322+i*24, 0) })
+	}
+	m.tone(toneDark, func() { m.vline(400, 270, 450, 2) })
+}
+
+func exceptionsLayout() []W {
+	return []W{
+		{R: cell(0, 0, 4, 1), Draw: clock("07:15", "Tuesday", "17 November", true)},
+		{R: cell(4, 0, 4, 2), Draw: weather("rainy", "Rain", 6, 9, 4, 94, forecast[1:])},
+		{R: cell(0, 1, 2, 2), Draw: temperature("Living room", "19", ".6°", "52")},
+		{R: cell(2, 1, 2, 2), Draw: unavailableW("Outdoor")},
+		{R: cell(0, 3, 4, 2), Draw: thermostat("Living room thermostat", "19.6°", "18.0°", "Idle")},
+		{R: cell(4, 2, 4, 3), Draw: lights("Lights", []light{{"Living room light", false, 0}, {"Kitchen light", false, 0}, {"Hallway", false, 0}}, true)},
+		{R: cell(0, 5, 2, 1), Alert: true, Draw: state("Front door", "Open", iDoor(true))},
+		{R: cell(2, 5, 2, 1), Draw: state("Bathroom window", "Closed", iWin(false))},
+		{R: cell(4, 5, 2, 1), Draw: state("Alex", "Away", iPerson(false))},
+		{R: cell(6, 5, 2, 1), Draw: value("Power", "88", "W", iBolt)},
+	}
+}
+
+func specimenB() []W {
+	return []W{
+		{R: cell(0, 0, 2, 1), Draw: weather("partlycloudy", "Partly cloudy", 8, 9, 3, 81, nil)},
+		{R: cell(2, 0, 4, 1), Draw: weather("partlycloudy", "Partly cloudy", 8, 9, 3, 81, nil)},
+		{R: cell(6, 0, 2, 1), Draw: clock("18:42", "", "", true)},
+		{R: cell(0, 1, 2, 2), Draw: weather("rainy", "Rain", 6, 9, 4, 94, nil)},
+		{R: cell(2, 1, 4, 2), Draw: weather("partlycloudy", "Partly cloudy", 8, 9, 3, 81, forecast)},
+		{R: cell(6, 1, 2, 1), Draw: lights("Lights", demoLights, false)},
+		{R: cell(6, 2, 2, 2), Draw: lights("Lights", demoLights, false)},
+		{R: cell(0, 3, 1, 1), Draw: state("Front door", "Closed", iDoor(false))},
+		{R: cell(1, 3, 1, 1), Alert: true, Draw: state("Window", "Open", iWin(true))},
+		{R: cell(2, 3, 2, 1), Draw: state("Front door", "Locked", func(m *M, cx, cy, s float64) { m.lock(cx, cy, s, true) })},
+		{R: cell(4, 3, 2, 1), Alert: true, Draw: state("Back door", "Unlocked", func(m *M, cx, cy, s float64) { m.lock(cx, cy, s, false) })},
+		{R: cell(0, 4, 4, 1), Draw: clock("18:42", "Monday", "16 November", true)},
+		{R: cell(4, 4, 4, 1), Draw: clock("", "Monday", "16 November 2026", false)},
+		{R: cell(0, 5, 2, 1), Draw: state("Alex", "Away", iPerson(false))},
+		{R: cell(2, 5, 6, 1), Draw: note("Bins go out tonight. Recycling and paper.")},
+	}
 }

@@ -1,6 +1,6 @@
 # Design
 
-homepaper has two surfaces: the **panel** (800 × 480, 1-bit) and the **web UI** where the user lays it out. Both follow one design language ([D-014](decisions.md#d-014)). The panel redesign is [D-015](decisions.md#d-015).
+homepaper has two surfaces: the **panel** (800 × 480, 1-bit, or 4 greys in grey mode) and the **web UI** where the user lays it out. Both follow one design language ([D-014](decisions.md#d-014)). The panel redesign is [D-015](decisions.md#d-015).
 
 **Status (2026-11-16):** both designs are agreed. Both are implemented. The renderer reproduces `design/hero-*.png` pixel for pixel (`TestGolden`), and the web UI follows the tokens below (`server/web/ui/src/style.css`).
 
@@ -43,6 +43,7 @@ The structure stays as built (header with display tabs, Layout/Display switch, e
   - Short select lists are radio cards, long ones a dropdown. Numbers get a −/+ stepper.
   - Required fields are marked "Required".
 - **Live preview:** the preview is a virtual display that receives the panel's own frames pushed, without the panel's rate limit. Refreshed regions flash a blue outline, and a status line under the bezel names the last frame.
+- **Colours:** a Black/white | 4 greys switch in the editor toolbar sets the layout's grey mode ([D-018](decisions.md#d-018)). It is disabled, with a tooltip, when the display reports a 1bpp panel.
 - **Dividers:** a Rules/Frames switch in the editor toolbar sets the layout's dividers ([D-015](decisions.md#d-015)). The design canvas had no place for it; the toolbar is the implementation's choice.
 - **Light only:** the old editor followed the system's dark mode. The design is ink on paper and has no dark variant, so the restyled UI is light only.
 - **Display tab:** numbered setup steps, the values to enter by hand (with Copy and Show), a status card with details, and Manage (rename, replace token, delete) with inline confirmation.
@@ -99,8 +100,32 @@ Frames instead of rules:
 
 The renderer draws all of this (`internal/render/kinds.go`, `draw.go`; see [rendering.md](rendering.md#panel-design-d-015)). The forecast comes from `weather.get_forecasts`, which the HA client fetches ([D-015](decisions.md#d-015)).
 
+## Panel in 4 greys (D-018)
+
+**Status (2026-11-18):** agreed and implemented as an option per display: "Colours: Black/white | 4 greys" in the editor toolbar, off by default, available when the display reports a 2bpp panel. The panel can show black, two greys and white, but only with a full refresh (2.1 s, flashes), while partial refresh (0.4 s) is black/white only. So a change that touches only black/white pixels goes out as a partial refresh, and a change to any grey pixel triggers a 4-grey full refresh ([D-018](decisions.md#d-018)).
+
+![The four levels and where each is used](design/grey-rules.png)
+
+**Rule: grey only where the pixels don't change with entity state or time.** A grey pixel that changes costs a flashing full refresh, so:
+- **Black stays** for values, units, state words, state icons (door, window, lock, person, bulb, flame), brightness meters (they appear and disappear with the light) and the inverted alert plate. Units and the `%` follow the width of their value, so they move and stay black too.
+- **Dark grey** for widget labels, column rules and frames, the clock and thermostat dividers, "Set to", the date line, forecast day names, heading rules and small fixed icons (humidity droplet, power bolt when left-aligned, high/low triangles).
+- **Light grey** for row lines (replacing the 1 px dotted line with a solid 2 px light line), cloud fills, and the hatch behind "Not available".
+- **Weather icons** get grey bodies with black outlines: a dark grey sun disc, light clouds for cloudy and snow, dark clouds for rain and thunder. They change a few times a day at most. The date and forecast change daily, which the hourly full refresh absorbs anyway.
+- Nothing that changes every minute (clock digits, values) ever sits on a grey ground. That is why there are no grey header bands or tinted widget backgrounds.
+- An alert widget turning black or back changes its grey label and the rules beside it, so it costs a full refresh. That is rare, and suits the large black plate anyway.
+- The web UI keeps its own rule ("patterns, not greys"); grey mode is about the panel only.
+
+| | |
+|---|---|
+| ![Main layout in 4 greys](design/grey-hero-rules.png) | ![With frames in 4 greys](design/grey-hero-frames.png) |
+| ![Nothing to report, 4 greys](design/grey-hero-calm.png) | ![Exceptions in 4 greys](design/grey-exceptions.png) |
+
+![Weather, lights, state, clock and text in 4 greys](design/grey-specimen-b.png)
+
 ## Mockups
 
-The PNGs in `design/` are true 800 × 480 1-bit images with demo data from `internal/ha/demo.go` (plus an invented forecast). They were drawn with the generator in `design/panelmock/` (its own Go module; `cd docs/design/panelmock && go run .` rewrites the PNGs), which uses the renderer's fonts and pipeline (bitmap and vector faces, whole-pixel text, threshold at 128). The renderer now draws `hero-*.png` identically, and `TestGolden` owns those three images. The other images (specimens, exceptions, type) are still mockup-only. Delete `panelmock/` once nothing needs those images any more.
+The `grey-*.png` images are 2bpp (palette 0, 85, 170, 255). Grey is drawn on separate coverage layers, each thresholded at 50 % and composed under the black ink, so anti-aliased edges never turn grey. The renderer draws `grey-hero-*.png` (`TestGolden` owns them); `grey-exceptions.png`, `grey-specimen-b.png` and `grey-rules.png` come from the generator (`newGreyM`, `greyicons.go`) and are mockup-only.
+
+The other PNGs in `design/` are true 800 × 480 1-bit images with demo data from `internal/ha/demo.go` (plus an invented forecast). They were drawn with the generator in `design/panelmock/` (its own Go module; `cd docs/design/panelmock && go run .` rewrites the PNGs), which uses the renderer's fonts and pipeline (bitmap and vector faces, whole-pixel text, threshold at 128). The renderer now draws `hero-*.png` identically, and `TestGolden` owns those three images. The other images (specimens, exceptions, type) are still mockup-only. Delete `panelmock/` once nothing needs those images any more.
 
 The web UI design exists as a design canvas only. There are no images of it in the repo.

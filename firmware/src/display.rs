@@ -1,18 +1,23 @@
 //! Framebuffer and panel abstraction.
 //!
-//! The framebuffer uses the wire format from docs/device-protocol.md: 1 bit
-//! per pixel, rows byte-aligned, MSB = leftmost pixel, set bit = white. A
-//! panel driver turns it into whatever the controller expects.
+//! The framebuffer uses the wire format from docs/device-protocol.md: 2 bits
+//! per pixel (`2bpp`), rows byte-aligned, the most significant bits are the
+//! leftmost pixel, 0 = black, 1 = dark grey, 2 = light grey, 3 = white. A
+//! panel driver turns it into whatever the controller expects: a full frame
+//! is a 4-grey refresh, a partial frame a black/white one (the server never
+//! changes grey pixels in a partial frame, D-018).
 
 use crate::protocol::{Region, KIND_FULL};
 
 pub const WIDTH: usize = 800;
 pub const HEIGHT: usize = 480;
-pub const STRIDE: usize = WIDTH / 8;
+/// Bits per pixel.
+pub const DEPTH: usize = 2;
+pub const STRIDE: usize = WIDTH * DEPTH / 8;
 pub const FB_SIZE: usize = STRIDE * HEIGHT;
 
 /// Reported to the server in the hello message.
-pub const PANEL_FORMAT: &str = "1bpp";
+pub const PANEL_FORMAT: &str = "2bpp";
 
 pub struct Framebuffer {
     pub pix: Vec<u8>,
@@ -26,9 +31,9 @@ impl Framebuffer {
 
     /// Copies a region's packed rows into the framebuffer.
     pub fn apply(&mut self, r: &Region, data: &[u8]) {
-        let stride = r.w as usize / 8;
+        let stride = r.w as usize * DEPTH / 8;
         for row in 0..r.h as usize {
-            let dst = (r.y as usize + row) * STRIDE + r.x as usize / 8;
+            let dst = (r.y as usize + row) * STRIDE + r.x as usize * DEPTH / 8;
             self.pix[dst..dst + stride].copy_from_slice(&data[row * stride..(row + 1) * stride]);
         }
     }
@@ -72,12 +77,18 @@ fn ascii_art(fb: &Framebuffer) -> String {
     let mut out = String::with_capacity((WIDTH / CW + 1) * (HEIGHT / CH));
     for cy in 0..HEIGHT / CH {
         for cx in 0..WIDTH / CW {
+            // Darkness 0..3 per pixel (3 = black), summed over the cell.
             let mut black = 0u32;
             for y in cy * CH..(cy + 1) * CH {
-                // One byte is exactly the 8 pixels of this cell's row.
-                black += (!fb.pix[y * STRIDE + cx]).count_ones();
+                // Two bytes are exactly the 8 pixels of this cell's row.
+                for b in &fb.pix[y * STRIDE + cx * 2..y * STRIDE + cx * 2 + 2] {
+                    for i in 0..4 {
+                        black += 3 - ((b >> (6 - 2 * i)) & 3) as u32;
+                    }
+                }
             }
-            let idx = (black as usize * (ramp.len() - 1) + (CW * CH) / 2) / (CW * CH);
+            let max = (CW * CH * 3) as usize;
+            let idx = (black as usize * (ramp.len() - 1) + max / 2) / max;
             out.push(ramp[idx.min(ramp.len() - 1)]);
         }
         out.push('\n');

@@ -42,6 +42,8 @@ export interface Layout {
   rows: number
   /** How widgets are separated; empty means rules (D-015). */
   dividers?: Dividers
+  /** Grey mode on 2bpp panels: labels, rules and static icons in grey (D-018). */
+  greys?: boolean
   widgets: Widget[]
 }
 

@@ -46,12 +46,12 @@ func TestLivePreview(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		hd, px, err := frame.Decode(data)
+		hd, px, err := frame.Decode(data, 2) // the default panel is 2bpp
 		if err != nil {
 			t.Fatal(err)
 		}
 		if fb == nil {
-			fb = frame.New(hd.Region.W, hd.Region.H)
+			fb = frame.NewDepth(hd.Region.W, hd.Region.H, 2)
 		}
 		fb.Apply(hd.Region, px)
 		if err := wsjson.Write(ctx, conn, map[string]any{"type": "ack", "seq": hd.Seq, "crc": fmt.Sprintf("%08x", fb.CRC32())}); err != nil {

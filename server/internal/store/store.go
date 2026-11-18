@@ -35,8 +35,12 @@ type Layout struct {
 	Rows int `json:"rows"`
 	// Dividers separates widgets: DividersRules (the default, also when
 	// empty) or DividersFrames (D-015).
-	Dividers string   `json:"dividers,omitempty"`
-	Widgets  []Widget `json:"widgets"`
+	Dividers string `json:"dividers,omitempty"`
+	// Greys turns on grey mode (D-018) on panels that report the 2bpp
+	// format: labels, rules and rarely changing icons are drawn in two
+	// greys. Ignored on 1bpp panels.
+	Greys   bool     `json:"greys,omitempty"`
+	Widgets []Widget `json:"widgets"`
 }
 
 const (
@@ -63,7 +67,7 @@ type Device struct {
 }
 
 // DefaultPanel is assumed until a device reports its own.
-var DefaultPanel = Panel{Model: "waveshare-7in5-v2", Width: 800, Height: 480, Format: "1bpp"}
+var DefaultPanel = Panel{Model: "waveshare-7in5-v2", Width: 800, Height: 480, Format: "2bpp"}
 
 var ErrNotFound = errors.New("not found")
 
@@ -107,6 +111,11 @@ func Open(path string) (*Store, error) {
 		return nil, err
 	}
 	for _, d := range f.Devices {
+		if d.LastSeen.IsZero() {
+			// Never connected: the panel is only the assumed default, which
+			// changed from 1bpp to 2bpp with D-018.
+			d.Panel = DefaultPanel
+		}
 		s.devices[d.ID] = d
 	}
 	if f.HA != nil {

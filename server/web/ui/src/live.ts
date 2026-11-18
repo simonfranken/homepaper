@@ -49,6 +49,9 @@ export function connectLive(o: LiveOptions): () => void {
   let fb: Uint8Array | undefined
   let width = 0
   let height = 0
+  // Bits per pixel, from the panel format in the server's welcome: 1bpp,
+  // or 2bpp with 4 levels (0 black … 3 white, D-018).
+  let depth = 1
 
   const draw = (x: number, y: number, w: number, h: number) => {
     const canvas = o.canvas()
@@ -64,12 +67,15 @@ export function connectLive(o: LiveOptions): () => void {
     const ctx = canvas.getContext('2d')
     if (!ctx) return
     const img = ctx.createImageData(w, h)
-    const stride = width / 8
+    const stride = (width * depth) / 8
+    const ppb = 8 / depth
+    const mask = (1 << depth) - 1
+    const scale = 255 / mask // 1bpp: bit set = white; 2bpp: 0, 85, 170, 255
     for (let row = 0; row < h; row++) {
       for (let col = 0; col < w; col++) {
         const px = x + col
-        const bit = (fb[(y + row) * stride + (px >> 3)] >> (7 - (px & 7))) & 1
-        const v = bit ? 255 : 0 // bit set = white
+        const shift = 8 - depth * ((px % ppb) + 1)
+        const v = ((fb[(y + row) * stride + Math.floor(px / ppb)] >> shift) & mask) * scale
         const i = (row * w + col) * 4
         img.data[i] = img.data[i + 1] = img.data[i + 2] = v
         img.data[i + 3] = 255
@@ -93,11 +99,12 @@ export function connectLive(o: LiveOptions): () => void {
       // A full frame is the whole panel and sets its size.
       width = w
       height = h
-      fb = new Uint8Array((w / 8) * h)
+      fb = new Uint8Array(((w * depth) / 8) * h)
     }
-    if (!fb || x % 8 || w % 8 || x + w > width || y + h > height || data.length !== (w / 8) * h) return
-    const stride = width / 8
-    for (let row = 0; row < h; row++) fb.set(data.subarray(row * (w / 8), (row + 1) * (w / 8)), (y + row) * stride + x / 8)
+    const rs = (w * depth) / 8 // bytes per region row
+    if (!fb || x % 8 || w % 8 || x + w > width || y + h > height || data.length !== rs * h) return
+    const stride = (width * depth) / 8
+    for (let row = 0; row < h; row++) fb.set(data.subarray(row * rs, (row + 1) * rs), (y + row) * stride + (x * depth) / 8)
     draw(x, y, w, h)
     const crc = crc32(fb).toString(16).padStart(8, '0')
     ws?.send(JSON.stringify({ type: 'ack', seq, crc }))
@@ -111,6 +118,15 @@ export function connectLive(o: LiveOptions): () => void {
     ws.onmessage = (m) => {
       if (m.data instanceof ArrayBuffer) onFrameData(m.data)
       else {
+        try {
+          const msg = JSON.parse(m.data)
+          if (msg.type === 'welcome') {
+            depth = msg.panel?.format === '2bpp' ? 2 : 1
+            fb = undefined // the next frame is full
+          }
+        } catch {
+          // not JSON: ignore
+        }
         delay = 1000
         o.onState(true)
       }

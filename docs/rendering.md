@@ -19,7 +19,7 @@ layout + widget configs + entity states
     images and icons → dither
         │
         ▼
-  pack to panel format (1bpp) ──► diff with last frame ──► changed regions
+  pack to panel format (1bpp, or 2bpp with grey mode) ──► diff with last frame ──► changed regions
 ```
 
 ## Renderer technology ([D-011](decisions.md#d-011))
@@ -44,6 +44,16 @@ The renderer is **native Go**, in the backend:
 - Icons (weather, bulb, status dot) are solid shapes and thick strokes, drawn in code, with no image assets.
 - All rendering is serialized by one mutex, because font faces aren't safe for concurrent use. A render takes milliseconds.
 
+## Grey mode ([D-018](decisions.md#d-018))
+
+On a panel that reports `2bpp`, `Render` returns a 2bpp bitmap. With `Layout.Greys` off it holds only black and white. With it on:
+- The widgets still draw black ink on the RGBA canvas. Grey goes onto two extra canvases, one per grey (`ctx.tone(toneDark|toneLight, f)` redirects drawing there, clipped to the widget).
+- `compose` thresholds each layer on its own at 128 and stacks them: black ink wins, then dark grey, then light grey, else white. So anti-aliased edges never turn grey, and a text change never touches grey pixels.
+- Inverted widgets ignore `tone` and draw white as before.
+- `greys.go` has the grey weather icons (grey bodies, black outlines) and the hatch behind "Not available".
+- **Rule: grey only where the pixels don't change with entity state or time.** A changed grey pixel forces a full 4-grey refresh (`frame.ChangedGrey` in the session). Units and anything whose position follows a value stay black; an icon next to a value may be grey only when left-aligned, so it can't move. Clock digits in Go Bold have equal widths, so the divider after the time stays put.
+- `TestGreyRoutineChangesStayBlackWhite` renders minute ticks, value changes, a light turning off and a dimmer change, and fails if any of them changes a grey pixel. `TestGolden` also owns `docs/design/grey-hero-*.png`.
+
 ## Panel design ([D-015](decisions.md#d-015))
 
 The renderer draws the design in [design.md](design.md#panel-d-015) (implemented 2026-11-16). `kinds.go` holds the widgets and `draw.go` the primitives:
@@ -61,7 +71,7 @@ The renderer draws the design in [design.md](design.md#panel-d-015) (implemented
 - **1-bit typography.** Anti-aliased text breaks up when converted to pure black and white. Prefer **bitmap fonts (BDF)** at fixed sizes (implemented, see above). For large display numbers, use vector fonts with a hard threshold (bold enough at the chosen sizes). **Never dither text.**
 - **Dither only images and icons** (e.g. weather icons, charts with fills). Floyd–Steinberg or ordered dithering.
 - **Design for paper**: high contrast, generous whitespace, no thin grey lines.
-- **Grey mode** (4 levels, 2bpp) is possible but has no partial refresh. That makes it a later option, not the default ([O-003](decisions.md#o-003)).
+- **Grey mode** (4 levels, 2bpp) is optional per layout and has no grey partial refresh, so grey stays on static content ([D-018](decisions.md#d-018), above).
 
 ## Update strategy ([D-005](decisions.md#d-005))
 
@@ -76,6 +86,7 @@ The renderer draws the design in [design.md](design.md#panel-d-015) (implemented
 
 - The editor preview is a **live virtual display** (`/api/devices/{id}/live`, see [device-protocol.md](device-protocol.md#editor-live-preview)). It gets the same pushed full and partial frames as the panel, but without the rate limit. Each refreshed region is outlined in blue for a moment, and a line under the preview names the last frame (number, kind, size, bytes, time).
 - `GET /api/devices/{id}/preview.png` returns the current frame as a PNG. The editor falls back to it while the live connection is down.
-- `server/cmd/fakedevice -png out.png` connects like a device and writes its reconstructed framebuffer after every frame.
+- `server/cmd/fakedevice -png out.png` connects like a device and writes its reconstructed framebuffer after every frame. `-format 1bpp|2bpp` sets the panel format it reports (default `2bpp`, like the firmware); its log marks frames whose framebuffer holds grey.
+- Grey mode renders are several times slower than black/white ones, because `ctx.tone` builds a full-canvas clip mask per call. Still milliseconds per frame; cache the masks if it ever matters.
 - The firmware prints full frames as ASCII art (100 × 30 characters) to the serial monitor while no panel is connected.
 - Later: an editor overlay highlighting regions that changed since the last frame.

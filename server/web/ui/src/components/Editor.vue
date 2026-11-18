@@ -316,6 +316,16 @@ function setDividers(v: Dividers) {
   scheduleSave()
 }
 
+// Grey mode (D-018): needs a panel that takes 2bpp frames.
+const canGrey = computed(() => props.device.panel.format === '2bpp')
+const greys = computed(() => !!layout.value.greys && canGrey.value)
+function setGreys(v: boolean) {
+  if (v === greys.value || !canGrey.value) return
+  record()
+  layout.value.greys = v || undefined
+  scheduleSave()
+}
+
 function updateOptions(w: Widget, options: Record<string, unknown>, key: string) {
   record(`opt:${w.id}:${key}`)
   w.options = options
@@ -415,6 +425,34 @@ const modKey = isMac ? '⌘' : 'Ctrl'
               @click="setDividers('frames')"
             >
               Frames
+            </button>
+          </div>
+        </div>
+        <div class="group" role="group" aria-label="Colours">
+          <span class="small muted">Colours</span>
+          <div class="seg">
+            <button
+              class="small"
+              :aria-pressed="!greys"
+              :class="{ on: !greys }"
+              title="Black and white only: every update can be a fast partial refresh"
+              @click="setGreys(false)"
+            >
+              Black/white
+            </button>
+            <button
+              class="small"
+              :aria-pressed="greys"
+              :class="{ on: greys }"
+              :disabled="!canGrey"
+              :title="
+                canGrey
+                  ? 'Labels, rules and weather icons in two greys. Values stay black, so routine updates stay fast; a change to grey costs a full refresh'
+                  : 'This display reports a black/white panel (1bpp)'
+              "
+              @click="setGreys(true)"
+            >
+              4 greys
             </button>
           </div>
         </div>

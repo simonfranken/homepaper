@@ -38,6 +38,39 @@ type ctx struct {
 	clip   image.Rectangle // the widget's area; text and fills are clipped to it
 	ink    color.Gray      // black, or white on an inverted widget
 	ax     float64         // horizontal alignment: 0 left, 0.5 centre, 1 right
+	// tones are the grey layers in grey mode (nil otherwise): index
+	// toneDark and toneLight. What is drawn black on one becomes that grey.
+	tones *[3]*gg.Context
+}
+
+// Grey layers (D-018).
+const (
+	toneDark  = 1
+	toneLight = 2
+)
+
+// greys reports whether this widget may draw grey: grey mode is on and the
+// widget isn't inverted.
+func (c *ctx) greys() bool { return c.tones != nil && c.ink.Y == 0 }
+
+// tone runs f with drawing redirected to a grey layer, clipped to the
+// widget. Without grey (1-bit, grey mode off, inverted widget) f draws in
+// the normal ink. Use it only for pixels that don't change with entity state
+// or time: a changed grey pixel costs a full 4-grey refresh.
+func (c *ctx) tone(level int, f func()) {
+	if !c.greys() {
+		f()
+		return
+	}
+	dc := c.dc
+	c.dc = c.tones[level]
+	c.dc.Push()
+	c.dc.DrawRectangle(float64(c.clip.Min.X), float64(c.clip.Min.Y), float64(c.clip.Dx()), float64(c.clip.Dy()))
+	c.dc.Clip()
+	f()
+	c.dc.ResetClip()
+	c.dc.Pop()
+	c.dc = dc
 }
 
 // alignX is where content w wide starts in r under the widget's alignment.
@@ -178,7 +211,7 @@ func (c *ctx) label(r R, s string) R {
 	}
 	f := face(fontMedium, px)
 	s = ellip(s, fontMedium, px, r.W)
-	c.T(s, fontMedium, px, c.alignX(r, width(f, s)), r.Y+capH(f), 0)
+	c.tone(toneDark, func() { c.T(s, fontMedium, px, c.alignX(r, width(f, s)), r.Y+capH(f), 0) })
 	used := capH(f) + 9
 	return R{r.X, r.Y + used, r.W, r.H - used}
 }
@@ -187,7 +220,7 @@ func (c *ctx) label(r R, s string) R {
 func (c *ctx) smallLabel(r R, s string) R {
 	f := face(fontMedium, 14)
 	s = ellip(s, fontMedium, 14, r.W)
-	c.T(s, fontMedium, 14, c.alignX(r, width(f, s)), r.Y+capH(f), 0)
+	c.tone(toneDark, func() { c.T(s, fontMedium, 14, c.alignX(r, width(f, s)), r.Y+capH(f), 0) })
 	used := capH(f) + 6
 	return R{r.X, r.Y + used, r.W, r.H - used}
 }
@@ -260,8 +293,12 @@ func (c *ctx) hline(x0, x1, y, t int) { c.fill(R{x0, y, x1 - x0, t}) }
 func (c *ctx) vline(x, y0, y1, t int) { c.fill(R{x, y0, t, y1 - y0}) }
 
 // dotted is a 1 px line, one pixel on, two off: it groups rows without
-// boxing them.
+// boxing them. In grey mode it is a solid 2 px light grey line.
 func (c *ctx) dotted(x0, x1, y int) {
+	if c.greys() {
+		c.tone(toneLight, func() { c.hline(x0, x1, y, 2) })
+		return
+	}
 	img := c.canvas()
 	for x := x0; x < x1; x += 3 {
 		img.Set(x, y, c.ink)
@@ -271,6 +308,8 @@ func (c *ctx) dotted(x0, x1, y int) {
 // bar is a 2 px outlined meter, filled to frac.
 func (c *ctx) bar(r R, frac float64) {
 	frac = math.Max(0, math.Min(1, frac))
+	// Black even in grey mode: the meter appears and disappears as the
+	// light turns on and off.
 	c.hline(r.X, r.right(), r.Y, 2)
 	c.hline(r.X, r.right(), r.bottom()-2, 2)
 	c.vline(r.X, r.Y, r.bottom(), 2)

@@ -72,7 +72,7 @@ server/
 ├── internal/ha/          state store, HA WebSocket client, demo source, Manager (switches source at runtime)
 ├── internal/store/       devices and layouts (JSON file)
 ├── internal/render/      widgets, icons, fonts → frame.Bitmap
-├── internal/frame/       1bpp bitmap, region diff, wire encoding (+ tests)
+├── internal/frame/       1bpp/2bpp bitmap, region diff, wire encoding (+ tests)
 ├── internal/devicehub/   device WebSocket: auth, sessions, diff/rate limit, acks
 ├── internal/api/         REST API, login via Home Assistant (auth.go), UI event WebSocket, fonts, SPA serving
 └── web/                  embed.go + dist/ (build output) + ui/ (Vue 3 source)

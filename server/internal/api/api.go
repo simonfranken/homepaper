@@ -179,9 +179,41 @@ func (a *API) entities(w http.ResponseWriter, r *http.Request) {
 type deviceDTO struct {
 	store.Device
 	Status devicehub.Status `json:"status"`
+	// Computed from the viewport (D-021), so the UI never repeats the rule.
+	Area   areaDTO  `json:"area"`
+	Grid   gridDTO  `json:"grid"`
+	Broken []string `json:"broken"`
+	// PitchMM is the panel's pixel pitch in mm, 0 if unknown.
+	PitchMM float64 `json:"pitch_mm,omitempty"`
 }
 
-func (a *API) dto(d store.Device) deviceDTO { return deviceDTO{Device: d, Status: a.Hub.Status(d.ID)} }
+type areaDTO struct {
+	X int `json:"x"`
+	Y int `json:"y"`
+	W int `json:"w"`
+	H int `json:"h"`
+}
+
+type gridDTO struct {
+	Cols int `json:"cols"`
+	Rows int `json:"rows"`
+	// The minimum cell size: below MinW × cols a column drops.
+	MinW int `json:"min_w"`
+	MinH int `json:"min_h"`
+}
+
+func (a *API) dto(d store.Device) deviceDTO {
+	r := d.Area()
+	cols, rows := render.Grid(d.Layout, r)
+	return deviceDTO{
+		Device:  d,
+		Status:  a.Hub.Status(d.ID),
+		Area:    areaDTO{r.Min.X, r.Min.Y, r.Dx(), r.Dy()},
+		Grid:    gridDTO{cols, rows, render.MinCellW, render.MinCellH},
+		Broken:  render.Broken(d.Layout, r),
+		PitchMM: d.Panel.PitchMM(),
+	}
+}
 
 func (a *API) listDevices(w http.ResponseWriter, r *http.Request) {
 	out := []deviceDTO{}
@@ -239,17 +271,32 @@ func (a *API) starterLayout() store.Layout {
 
 func (a *API) patchDevice(w http.ResponseWriter, r *http.Request) {
 	var body struct {
-		Name       *string `json:"name"`
-		ResetToken bool    `json:"reset_token"`
+		Name       *string         `json:"name"`
+		ResetToken bool            `json:"reset_token"`
+		Viewport   *store.Viewport `json:"viewport"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeErr(w, err)
 		return
 	}
 	id := r.PathValue("id")
+	if body.Viewport != nil {
+		cur, err := a.Store.Get(id)
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		if err := validateViewport(*body.Viewport, cur.Panel); err != nil {
+			writeErr(w, err)
+			return
+		}
+	}
 	d, err := a.Store.Update(id, func(d *store.Device) {
 		if body.Name != nil && strings.TrimSpace(*body.Name) != "" {
 			d.Name = strings.TrimSpace(*body.Name)
+		}
+		if body.Viewport != nil {
+			d.Viewport = *body.Viewport
 		}
 	})
 	if err == nil && body.ResetToken {
@@ -260,8 +307,41 @@ func (a *API) patchDevice(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, err)
 		return
 	}
+	if body.Viewport != nil {
+		// Most of the frame changes, so the next frame is a full refresh.
+		a.Hub.Wake(id)
+		a.events.send(map[string]string{"type": "render", "device": id})
+	}
 	a.events.send(map[string]string{"type": "devices"})
 	writeJSON(w, http.StatusOK, a.dto(d))
+}
+
+// validateViewport checks a display area against the panel (D-021): W and H
+// are 0 (the full panel) or between one cell and the panel's size, and the
+// offset keeps the area on the panel.
+func validateViewport(v store.Viewport, p store.Panel) error {
+	pw, ph := p.Width, p.Height
+	if pw <= 0 || ph <= 0 {
+		pw, ph = store.DefaultPanel.Width, store.DefaultPanel.Height
+	}
+	if v.W != 0 && (v.W < render.MinCellW || v.W > pw) {
+		return fmt.Errorf("width must be between %d and %d px", render.MinCellW, pw)
+	}
+	if v.H != 0 && (v.H < render.MinCellH || v.H > ph) {
+		return fmt.Errorf("height must be between %d and %d px", render.MinCellH, ph)
+	}
+	w, h := v.W, v.H
+	if w == 0 {
+		w = pw
+	}
+	if h == 0 {
+		h = ph
+	}
+	x, y := (pw-w)/2+v.OffsetX, (ph-h)/2+v.OffsetY
+	if x < 0 || x+w > pw || y < 0 || y+h > ph {
+		return errors.New("the offset moves the area off the panel")
+	}
+	return nil
 }
 
 func (a *API) deleteDevice(w http.ResponseWriter, r *http.Request) {
@@ -333,7 +413,7 @@ func (a *API) preview(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, err)
 		return
 	}
-	bmp := render.Render(d.Layout, d.Panel, a.States, time.Now().In(a.Location))
+	bmp := render.RenderIn(d.Layout, d.Panel, d.Viewport, a.States, time.Now().In(a.Location))
 	var buf bytes.Buffer
 	if err := png.Encode(&buf, bmp.ToGray()); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)

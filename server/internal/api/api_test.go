@@ -163,3 +163,63 @@ func TestValidateLayout(t *testing.T) {
 		}
 	}
 }
+
+// The display area (D-021): PATCH validates it, the DTO carries the
+// computed area, grid and broken widgets, and a layout with broken widgets
+// still saves.
+func TestViewport(t *testing.T) {
+	_, h := newTestAPI(t)
+	if code, out := call(t, h, "POST", "/api/devices", map[string]string{"id": "hall"}); code != 201 {
+		t.Fatalf("create: %d %v", code, out)
+	}
+	layout := store.Layout{Cols: 8, Rows: 6, Widgets: []store.Widget{
+		{ID: "a", Kind: "clock", X: 0, Y: 0, W: 3, H: 1},
+		{ID: "b", Kind: "clock", X: 7, Y: 0, W: 1, H: 1},
+		{ID: "c", Kind: "clock", X: 0, Y: 5, W: 2, H: 1},
+	}}
+	if code, out := call(t, h, "PUT", "/api/devices/hall/layout", layout); code != 200 {
+		t.Fatalf("layout: %d %v", code, out)
+	}
+
+	for _, bad := range []store.Viewport{
+		{W: 79},
+		{W: 801},
+		{H: 63},
+		{H: 481},
+		{W: 600, OffsetX: 101},
+		{W: 600, OffsetX: -101},
+		{H: 400, OffsetY: 41},
+		{OffsetX: 1},
+	} {
+		if code, out := call(t, h, "PATCH", "/api/devices/hall", map[string]any{"viewport": bad}); code != 400 {
+			t.Errorf("viewport %+v: %d %v, want 400", bad, code, out)
+		}
+	}
+
+	code, out := call(t, h, "PATCH", "/api/devices/hall", map[string]any{"viewport": store.Viewport{W: 600, H: 432, OffsetX: -8}})
+	if code != 200 {
+		t.Fatalf("patch: %d %v", code, out)
+	}
+	area := out["area"].(map[string]any)
+	grid := out["grid"].(map[string]any)
+	if area["x"] != 92.0 || area["y"] != 24.0 || area["w"] != 600.0 || area["h"] != 432.0 {
+		t.Errorf("area = %v", area)
+	}
+	if grid["cols"] != 7.0 || grid["rows"] != 6.0 || grid["min_w"] != 80.0 {
+		t.Errorf("grid = %v", grid)
+	}
+	if b := out["broken"].([]any); len(b) != 1 || b[0] != "b" {
+		t.Errorf("broken = %v, want [b]", b)
+	}
+
+	// A layout with broken widgets still saves; it is checked against 8 × 6.
+	if code, out := call(t, h, "PUT", "/api/devices/hall/layout", layout); code != 200 {
+		t.Fatalf("layout with a broken widget: %d %v", code, out)
+	}
+
+	// Back to the full panel: nothing is broken and the field disappears.
+	_, out = call(t, h, "PATCH", "/api/devices/hall", map[string]any{"viewport": store.Viewport{}})
+	if _, has := out["viewport"]; has || len(out["broken"].([]any)) != 0 || out["grid"].(map[string]any)["cols"] != 8.0 {
+		t.Errorf("full panel: %v", out)
+	}
+}

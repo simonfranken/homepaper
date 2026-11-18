@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"image"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -56,15 +57,65 @@ type Panel struct {
 	Format string `json:"format"`
 }
 
+// Viewport is the part of the panel homepaper draws on (D-021). The rest of
+// the panel stays white, so the content can fill a picture frame's opening
+// whose aspect ratio differs from the panel's. The zero value is the full
+// panel.
+type Viewport struct {
+	W       int `json:"w,omitempty"`        // 0 = full panel width
+	H       int `json:"h,omitempty"`        // 0 = full panel height
+	OffsetX int `json:"offset_x,omitempty"` // px from centred, may be negative
+	OffsetY int `json:"offset_y,omitempty"`
+	// Edges draws a 1 px line around the area, for lining it up with the
+	// frame's opening. Off by default.
+	Edges bool `json:"edges,omitempty"`
+}
+
+// Area resolves the viewport against a panel: W and H are clamped to the
+// panel, the area is centred, the offset applied and the result clamped so
+// it stays on the panel. A viewport stored for a larger panel is never
+// reset, only clamped.
+func (v Viewport) Area(p Panel) image.Rectangle {
+	pw, ph := p.Width, p.Height
+	if pw <= 0 || ph <= 0 {
+		pw, ph = DefaultPanel.Width, DefaultPanel.Height
+	}
+	w, h := v.W, v.H
+	if w <= 0 || w > pw {
+		w = pw
+	}
+	if h <= 0 || h > ph {
+		h = ph
+	}
+	x := clamp((pw-w)/2+v.OffsetX, 0, pw-w)
+	y := clamp((ph-h)/2+v.OffsetY, 0, ph-h)
+	return image.Rect(x, y, x+w, y+h)
+}
+
+func clamp(v, lo, hi int) int { return max(lo, min(hi, v)) }
+
 type Device struct {
 	ID        string    `json:"id"`
 	Name      string    `json:"name"`
 	Token     string    `json:"token"`
 	Panel     Panel     `json:"panel"`
+	Viewport  Viewport  `json:"viewport,omitzero"`
 	Layout    Layout    `json:"layout"`
 	CreatedAt time.Time `json:"created_at"`
 	LastSeen  time.Time `json:"last_seen,omitempty"`
 }
+
+// Area is the part of the panel the layout is drawn on (D-021).
+func (d Device) Area() image.Rectangle { return d.Viewport.Area(d.Panel) }
+
+// pitchMM is the pixel pitch of the panels whose display area is known
+// (docs/hardware.md), for showing the display area in millimetres.
+var pitchMM = map[string]float64{
+	"waveshare-7in5-v2": 163.2 / 800, // display area 163.2 × 97.92 mm
+}
+
+// PitchMM returns the panel's pixel pitch in mm, or 0 if it isn't known.
+func (p Panel) PitchMM() float64 { return pitchMM[p.Model] }
 
 // DefaultPanel is assumed until a device reports its own.
 var DefaultPanel = Panel{Model: "waveshare-7in5-v2", Width: 800, Height: 480, Format: "2bpp"}

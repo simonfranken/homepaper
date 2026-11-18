@@ -222,8 +222,16 @@ const ha = computed(() => {
         :entities="entities"
         :preview-version="previewVersion"
         @saved="onUpdated"
+        @open-display="view = 'display'"
       />
-      <DeviceView v-else :key="'d-' + selected.id" :device="selected" @updated="onUpdated" @deleted="onDeleted" />
+      <DeviceView
+        v-else
+        :key="'d-' + selected.id"
+        :device="selected"
+        @updated="onUpdated"
+        @deleted="onDeleted"
+        @open-layout="view = 'layout'"
+      />
     </main>
     <main v-else-if="loaded" class="first">
       <div class="mini-bezel" aria-hidden="true">

@@ -15,6 +15,14 @@ Users combine widget kinds with HA values in the web UI ([D-004](decisions.md#d-
 
 A snap grid such as **8 × 6 cells** on 800 × 480 (100 × 80 px per cell) is proposed. It's still to be decided ([P-003](decisions.md#p-003)). Widgets declare which sizes they support (e.g. 1×1, 2×1, 2×2) and adapt their content to the space.
 
+### Effective grid and broken widgets ([D-021](decisions.md#d-021))
+
+The layout is drawn into the device's **display area**, which can be smaller than the panel. Cells shrink with the area until they would fall below the minimum cell size of **80 × 64 px** (`render.MinCellW/H`, suggested, not yet confirmed); then the grid drops a whole column or row. `render.Grid` computes this **effective grid**, `render.Fits` says whether a widget lies inside it. The API hands `grid`, `area` and `broken` (plus the minimum cell size) to the editor. The one exception: the Display tab repeats the floor-and-clamp to preview the grid of values that aren't applied yet, using the server's minimum cell size.
+
+- A widget outside the effective grid is **broken**: it isn't drawn, but stays stored and comes back when the area grows.
+- Layouts are still validated against the stored 8 × 6 grid, so a layout with broken widgets saves.
+- The editor shows broken widgets as red dashed outlines over the margin and lists them under the preview, with **Place** (the first free spot at the largest size that fits, down to the kind's minimum), **Edit** and **Delete**. Broken widgets still hold their cells: placing, adding and keyboard moves avoid them, and a drag onto them is undone, so nothing lands on top of them when the area grows.
+
 ## v1 catalogue
 
 **Implemented** in `server/internal/render/widgets.go` as `value`, `temperature`, `climate`, `weather`, `lights`, `binary`, `clock` and `text`. The editor builds its forms from the field schema at `GET /api/widgets`, so adding a field in Go is enough. Differences from the original plan:

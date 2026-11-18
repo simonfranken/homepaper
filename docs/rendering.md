@@ -22,6 +22,14 @@ layout + widget configs + entity states
   pack to panel format (1bpp, or 2bpp with grey mode) ──► diff with last frame ──► changed regions
 ```
 
+## Display area ([D-021](decisions.md#d-021))
+
+`render.RenderIn` draws the layout into the device's display area (`store.Viewport`, resolved by `Viewport.Area`): exactly as on a panel the size of the area, including grey layers and rules, which use the area's edges. The result is then copied onto a white full-panel image at the area's position before packing. Widgets outside the effective grid (`render.Grid`, `render.Fits`) are skipped. With the default viewport the output is byte-identical to before (`TestFullAreaUnchanged`, the golden images).
+
+- Frames always cover the full panel, and the margin is constant, so it never shows up in a diff. Changing the area changes most of the frame, which makes the next frame a full refresh by the existing rule.
+- With `edges` on, a 1 px black line is drawn on the area's outermost pixels, for lining the area up with the frame's opening.
+- A viewport stored for a larger panel is kept and clamped when a smaller panel registers.
+
 ## Renderer technology ([D-011](decisions.md#d-011))
 
 The renderer is **native Go**, in the backend:

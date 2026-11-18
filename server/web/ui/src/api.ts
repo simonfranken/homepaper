@@ -66,15 +66,36 @@ export interface DeviceStatus {
   last_error?: string
 }
 
+/** The part of the panel homepaper draws on (D-021). Absent or 0 means the full panel. */
+export interface Viewport {
+  w?: number
+  h?: number
+  /** px from centred, may be negative */
+  offset_x?: number
+  offset_y?: number
+  /** Draw a 1 px line around the area, for lining it up with the frame. */
+  edges?: boolean
+}
+
 export interface Device {
   id: string
   name: string
   token: string
   panel: { model: string; width: number; height: number; format: string }
+  viewport?: Viewport
   layout: Layout
   created_at: string
   last_seen?: string
   status: DeviceStatus
+  // Computed by the server from the viewport, so the UI never repeats the rule.
+  /** The display area on the panel, in panel px. */
+  area: { x: number; y: number; w: number; h: number }
+  /** The effective grid, and the minimum cell size that decides it. */
+  grid: { cols: number; rows: number; min_w: number; min_h: number }
+  /** IDs of the widgets outside the effective grid, not drawn. */
+  broken: string[]
+  /** The panel's pixel pitch in mm, absent if unknown. */
+  pitch_mm?: number
 }
 
 export interface Entity {
@@ -148,6 +169,7 @@ export const api = {
   device: (id: string) => req<Device>('GET', `/api/devices/${id}`),
   createDevice: (id: string, name: string) => req<Device>('POST', '/api/devices', { id, name }),
   renameDevice: (id: string, name: string) => req<Device>('PATCH', `/api/devices/${id}`, { name }),
+  setViewport: (id: string, viewport: Viewport) => req<Device>('PATCH', `/api/devices/${id}`, { viewport }),
   resetToken: (id: string) => req<Device>('PATCH', `/api/devices/${id}`, { reset_token: true }),
   deleteDevice: (id: string) => req<void>('DELETE', `/api/devices/${id}`),
   saveLayout: (id: string, layout: Layout) => req<Device>('PUT', `/api/devices/${id}/layout`, layout),

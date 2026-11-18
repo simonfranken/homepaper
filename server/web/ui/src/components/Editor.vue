@@ -7,7 +7,7 @@ import { connectLive, type LiveFrame } from '../live'
 import WidgetForm from './WidgetForm.vue'
 
 const props = defineProps<{ device: Device; kinds: WidgetKind[]; entities: Entity[]; previewVersion: number }>()
-const emit = defineEmits<{ saved: [d: Device] }>()
+const emit = defineEmits<{ saved: [d: Device]; openDisplay: [] }>()
 
 const clone = <T,>(v: T): T => JSON.parse(JSON.stringify(v))
 
@@ -24,9 +24,24 @@ const widgetById = computed(() => Object.fromEntries(layout.value.widgets.map((w
 const selectedWidget = computed(() => layout.value.widgets.find((w) => w.id === selectedId.value))
 const selectedKind = computed(() => (selectedWidget.value ? kindByName.value[selectedWidget.value.kind] : undefined))
 
+// ---- Display area (D-021) -------------------------------------------------
+// The layout is drawn into the display area; the server computes the area
+// and its effective grid. Widgets outside that grid aren't drawn, but stay
+// stored ("broken") until the user places, edits or deletes them.
+const area = computed(() => props.device.area)
+const cols = computed(() => props.device.grid.cols)
+const rows = computed(() => props.device.grid.rows)
+const fullArea = computed(
+  () => area.value.w === props.device.panel.width && area.value.h === props.device.panel.height,
+)
+const outside = (w: Widget) => w.x < 0 || w.y < 0 || w.x + w.w > cols.value || w.y + w.h > rows.value
+const broken = computed(() => layout.value.widgets.filter(outside))
+const brokenIds = computed(() => new Set(broken.value.map((w) => w.id)))
+
 const gridItems = ref(toItems())
+watch([cols, rows], () => (gridItems.value = toItems()))
 function toItems() {
-  return layout.value.widgets.map((w) => ({
+  return layout.value.widgets.filter((w) => !outside(w)).map((w) => ({
     i: w.id,
     x: w.x,
     y: w.y,
@@ -42,9 +57,9 @@ function toItems() {
 // width one panel pixel is one CSS pixel and the image stays crisp.
 const frameEl = ref<HTMLElement>()
 const width = ref(props.device.panel.width)
-const aspect = computed(() => props.device.panel.height / props.device.panel.width)
-const rowHeight = computed(() => (width.value * aspect.value) / layout.value.rows)
-const colWidth = computed(() => width.value / layout.value.cols)
+const scale = computed(() => width.value / props.device.panel.width)
+const rowHeight = computed(() => (area.value.h * scale.value) / rows.value)
+const colWidth = computed(() => (area.value.w * scale.value) / cols.value)
 const exactPixels = computed(() => Math.abs(width.value - props.device.panel.width) < 0.5)
 const scalePercent = computed(() => Math.round((width.value / props.device.panel.width) * 100))
 // A scaled 1-bit image turns grey and soft in the browser, which the panel
@@ -105,6 +120,28 @@ onUnmounted(() => stopLive?.())
 
 function pct(n: number, of: number) {
   return `${(n / of) * 100}%`
+}
+
+// Positions in panel px, as percentages of the frame.
+function box(x: number, y: number, w: number, h: number) {
+  const { width: pw, height: ph } = props.device.panel
+  return { left: pct(x, pw), top: pct(y, ph), width: pct(w, pw), height: pct(h, ph) }
+}
+const areaStyle = computed(() => box(area.value.x, area.value.y, area.value.w, area.value.h))
+// The margin: the whole panel minus the area, hatched in editor blue.
+const marginClip = computed(() => {
+  const { width: pw, height: ph } = props.device.panel
+  const x0 = pct(area.value.x, pw)
+  const y0 = pct(area.value.y, ph)
+  const x1 = pct(area.value.x + area.value.w, pw)
+  const y1 = pct(area.value.y + area.value.h, ph)
+  return `polygon(evenodd, 0 0, 100% 0, 100% 100%, 0 100%, 0 0, ${x0} ${y0}, ${x0} ${y1}, ${x1} ${y1}, ${x1} ${y0}, ${x0} ${y0})`
+})
+// Where a broken widget would sit at today's cell size: over the margin.
+function ghostStyle(w: Widget) {
+  const cw = area.value.w / cols.value
+  const ch = area.value.h / rows.value
+  return box(area.value.x + w.x * cw, area.value.y + w.y * ch, w.w * cw, w.h * ch)
 }
 
 // ---- Preview -------------------------------------------------------------
@@ -224,21 +261,30 @@ function onLayoutUpdated() {
     return w && (w.x !== it.x || w.y !== it.y || w.w !== it.w || w.h !== it.h)
   })
   if (!moved.length) return
+  // The grid only knows the widgets inside the effective grid. Broken ones
+  // still hold their cells, so a drag onto them is undone.
+  if (moved.some((it) => !fits(it.x, it.y, it.w, it.h, String(it.i)))) {
+    gridItems.value = toItems()
+    say("That spot is still held by a widget that doesn't fit at this display size.")
+    return
+  }
   record()
   for (const it of moved) Object.assign(widgetById.value[it.i], { x: it.x, y: it.y, w: it.w, h: it.h })
   scheduleSave()
 }
 
+// The effective grid bounds every move. Broken widgets still block their
+// cells, so placing them later never makes two widgets overlap.
 function fits(x: number, y: number, w: number, h: number, ignore?: string) {
-  if (x < 0 || y < 0 || x + w > layout.value.cols || y + h > layout.value.rows) return false
+  if (x < 0 || y < 0 || x + w > cols.value || y + h > rows.value) return false
   return !layout.value.widgets.some(
     (o) => o.id !== ignore && x < o.x + o.w && x + w > o.x && y < o.y + o.h && y + h > o.y,
   )
 }
 
-function freeSpot(w: number, h: number) {
-  for (let y = 0; y + h <= layout.value.rows; y++)
-    for (let x = 0; x + w <= layout.value.cols; x++) if (fits(x, y, w, h)) return { x, y }
+function freeSpot(w: number, h: number, ignore?: string) {
+  for (let y = 0; y + h <= rows.value; y++)
+    for (let x = 0; x + w <= cols.value; x++) if (fits(x, y, w, h, ignore)) return { x, y }
 }
 
 // Arrow keys move the selected widget by one cell, with Shift they resize it.
@@ -296,6 +342,65 @@ function addWidget(kind: WidgetKind) {
 function duplicate() {
   const w = selectedWidget.value
   if (w && selectedKind.value) place(selectedKind.value, clone(w.options), w.w, w.h)
+}
+
+// Place a broken widget at the first free spot, at the largest size that
+// fits there, down to the kind's minimum.
+function placeBroken(w: Widget) {
+  const kind = kindByName.value[w.kind]
+  const minW = kind?.min_w ?? 1
+  const minH = kind?.min_h ?? 1
+  const sizes: [number, number][] = []
+  for (let sw = Math.min(w.w, cols.value); sw >= minW; sw--)
+    for (let sh = Math.min(w.h, rows.value); sh >= minH; sh--) sizes.push([sw, sh])
+  sizes.sort((a, b) => b[0] * b[1] - a[0] * a[1] || b[0] - a[0])
+  for (const [sw, sh] of sizes) {
+    const spot = freeSpot(sw, sh, w.id)
+    if (!spot) continue
+    record()
+    Object.assign(w, { ...spot, w: sw, h: sh })
+    gridItems.value = toItems()
+    selectedId.value = w.id
+    say(sw === w.w && sh === w.h ? 'Widget placed.' : `Widget placed at ${sw} × ${sh} cells.`)
+    scheduleSave()
+    return
+  }
+  say("There's no free spot at this display size. Shrink or remove another widget first.")
+}
+
+const entityName = computed(() => Object.fromEntries(props.entities.map((e) => [e.id, e.name])))
+function widgetName(w: Widget) {
+  const o = w.options
+  const entity = String(o.entity || o.entities || '')
+    .split(',')[0]
+    .trim()
+  const name = String(o.label || o.text || entityName.value[entity] || entity).trim()
+  return name || kindByName.value[w.kind]?.label || w.kind
+}
+
+function brokenReason(w: Widget) {
+  const out: string[] = []
+  if (w.x + w.w > cols.value)
+    out.push(
+      w.w === 1 ? `It's in column ${w.x + 1}` : `It spans columns ${w.x + 1}–${w.x + w.w}`,
+      `the display area leaves room for ${cols.value}`,
+    )
+  else if (w.y + w.h > rows.value)
+    out.push(
+      w.h === 1 ? `It's in row ${w.y + 1}` : `It spans rows ${w.y + 1}–${w.y + w.h}`,
+      `the display area leaves room for ${rows.value}`,
+    )
+  return out.join(', and ') + '.'
+}
+
+// Turning the edge line off from here, without a trip to the Display tab.
+async function edgesOff() {
+  try {
+    const d = await api.setViewport(props.device.id, { ...props.device.viewport, edges: false })
+    emit('saved', { ...d, layout: clone(layout.value) })
+  } catch (e) {
+    say(`Couldn't turn the edge line off: ${(e as Error).message}`)
+  }
 }
 
 function removeWidget(id: string) {
@@ -469,6 +574,15 @@ const modKey = isMac ? '⌘' : 'Ctrl'
             {{ actualSize ? 'Fit to window' : 'Actual size' }}
           </button>
         </div>
+        <button
+          v-if="!fullArea"
+          class="small area-chip"
+          title="Change the display area in the Display tab"
+          @click="emit('openDisplay')"
+        >
+          <span class="hatch-key" aria-hidden="true"></span>
+          Area {{ area.w }} × {{ area.h }} · {{ cols }} × {{ rows }} cells
+        </button>
         <span class="save small" :class="saveState" role="status">
           <template v-if="saveState === 'error'">
             <Icon name="warn" :size="14" />
@@ -479,6 +593,12 @@ const modKey = isMac ? '⌘' : 'Ctrl'
           <template v-else><Icon name="check" :size="14" :stroke="3" /> All changes saved</template>
         </span>
       </div>
+
+      <p v-if="device.viewport?.edges" class="edges-on" role="status">
+        <span class="mono badge">EDGES ON</span>
+        <span>The display shows a line around the drawn area, so you can line it up with the frame. Turn it off when it fits.</span>
+        <button class="small" @click="edgesOff">Turn off</button>
+      </p>
 
       <div class="scroller" :class="{ actual: actualSize }">
         <div
@@ -524,44 +644,62 @@ const modKey = isMac ? '⌘' : 'Ctrl'
                 height: pct(f.h, device.panel.height),
               }"
             ></div>
-            <div class="guides" aria-hidden="true"></div>
-            <GridLayout
-              v-model:layout="gridItems"
-              :col-num="layout.cols"
-              :row-height="rowHeight"
-              :max-rows="layout.rows"
-              :margin="[0, 0]"
-              :vertical-compact="false"
-              :prevent-collision="true"
-              :is-bounded="true"
-              :auto-size="false"
-              @layout-updated="onLayoutUpdated"
-            >
-              <GridItem
-                v-for="item in gridItems"
-                :key="item.i"
-                :i="item.i"
-                :x="item.x"
-                :y="item.y"
-                :w="item.w"
-                :h="item.h"
-                :min-w="item.minW"
-                :min-h="item.minH"
-                class="cell"
-                :class="{ selected: item.i === selectedId, problem: problems[item.i] }"
-                @pointerdown="selectedId = String(item.i)"
-                @move="dragging = true"
-                @resize="dragging = true"
-                @moved="dragging = false"
-                @resized="dragging = false"
+            <div v-if="!fullArea" class="margin" :style="{ clipPath: marginClip }" aria-hidden="true"></div>
+            <div class="area" :class="{ partial: !fullArea }" :style="areaStyle">
+              <div class="guides" aria-hidden="true"></div>
+              <GridLayout
+                v-model:layout="gridItems"
+                :col-num="cols"
+                :row-height="rowHeight"
+                :max-rows="rows"
+                :margin="[0, 0]"
+                :vertical-compact="false"
+                :prevent-collision="true"
+                :is-bounded="true"
+                :auto-size="false"
+                @layout-updated="onLayoutUpdated"
               >
-                <span class="tag">{{ kindByName[widgetById[item.i]?.kind ?? '']?.label }}</span>
-                <span v-if="problems[item.i]" class="flag">
-                  <Icon name="warn" :size="12" :stroke="3" />
-                  {{ problems[item.i] }}
-                </span>
-              </GridItem>
-            </GridLayout>
+                <GridItem
+                  v-for="item in gridItems"
+                  :key="item.i"
+                  :i="item.i"
+                  :x="item.x"
+                  :y="item.y"
+                  :w="item.w"
+                  :h="item.h"
+                  :min-w="item.minW"
+                  :min-h="item.minH"
+                  class="cell"
+                  :class="{ selected: item.i === selectedId, problem: problems[item.i] }"
+                  @pointerdown="selectedId = String(item.i)"
+                  @move="dragging = true"
+                  @resize="dragging = true"
+                  @moved="dragging = false"
+                  @resized="dragging = false"
+                >
+                  <span class="tag">{{ kindByName[widgetById[item.i]?.kind ?? '']?.label }}</span>
+                  <span v-if="problems[item.i]" class="flag">
+                    <Icon name="warn" :size="12" :stroke="3" />
+                    {{ problems[item.i] }}
+                  </span>
+                </GridItem>
+              </GridLayout>
+            </div>
+            <div v-if="broken.length" class="ghosts">
+              <button
+                v-for="w in broken"
+                :key="w.id"
+                class="ghost"
+                :class="{ selected: w.id === selectedId }"
+                :style="ghostStyle(w)"
+                :aria-label="`${kindByName[w.kind]?.label ?? w.kind} ${widgetName(w)}: doesn't fit at this display size`"
+                @pointerdown.stop
+                @click="selectedId = w.id"
+              >
+                <span class="tag">{{ kindByName[w.kind]?.label ?? w.kind }}</span>
+                <span class="flag"><Icon name="warn" :size="12" :stroke="3" /> Doesn't fit</span>
+              </button>
+            </div>
             <div v-if="!layout.widgets.length" class="blank">
               <p class="blank-title">This display is empty.</p>
               <p class="small">Add a widget from the list to start the layout.</p>
@@ -578,6 +716,32 @@ const modKey = isMac ? '⌘' : 'Ctrl'
         </template>
         <template v-else><span class="spin"></span> Connecting the live preview…</template>
       </p>
+
+      <section v-if="broken.length" class="card broken" aria-labelledby="broken-h">
+        <div class="broken-head">
+          <h3 id="broken-h">
+            <Icon name="warn" :size="16" :stroke="3" />
+            Doesn't fit at this display size · {{ broken.length }}
+          </h3>
+          <p class="small muted">Not drawn on the display, still saved. They come back by themselves if the area grows.</p>
+        </div>
+        <ul>
+          <li v-for="w in broken" :key="w.id" :class="{ selected: w.id === selectedId }">
+            <span class="kind-tag">{{ kindByName[w.kind]?.label ?? w.kind }}</span>
+            <div class="b-text">
+              <p class="b-name">{{ widgetName(w) }}</p>
+              <p class="small muted">{{ w.w }} × {{ w.h }} cells. {{ brokenReason(w) }}</p>
+            </div>
+            <div class="b-actions">
+              <button class="small primary" title="Move it to the first free spot, smaller if needed" @click="placeBroken(w)">
+                Place
+              </button>
+              <button class="small" @click="selectedId = w.id">Edit</button>
+              <button class="small danger" @click="removeWidget(w.id)">Delete</button>
+            </div>
+          </li>
+        </ul>
+      </section>
 
       <p v-if="notice" class="toast" role="status">
         <span>{{ notice }}</span>
@@ -606,6 +770,16 @@ const modKey = isMac ? '⌘' : 'Ctrl'
           <button class="quiet small" title="Deselect (Esc)" @click="selectedId = undefined">Done</button>
         </div>
         <div class="pane-body">
+          <div v-if="brokenIds.has(selectedWidget.id)" class="notice bad doesnt-fit" role="status">
+            <p><Icon name="warn" :size="18" /> Doesn't fit at this display size</p>
+            <p class="small">
+              {{ brokenReason(selectedWidget) }} It isn't drawn until you place it, or the area grows again.
+            </p>
+            <div class="row">
+              <button class="small primary" @click="placeBroken(selectedWidget)">Place</button>
+              <button class="small quiet" @click="emit('openDisplay')">Change the display area</button>
+            </div>
+          </div>
           <p v-if="problems[selectedWidget.id]" class="notice bad" role="status">
             <Icon name="warn" :size="18" />
             {{
@@ -1053,6 +1227,189 @@ const modKey = isMac ? '⌘' : 'Ctrl'
   font-size: var(--t12);
   font-weight: 400;
   color: var(--muted);
+}
+
+/* ---- Display area (D-021) ------------------------------------------------ */
+
+/* The margin stays white on the panel; the hatch is editor blue. */
+.margin {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: repeating-linear-gradient(45deg, rgb(29 78 216 / 0.32) 0 2px, transparent 2px 7px);
+}
+
+.area {
+  position: absolute;
+}
+
+.area.partial {
+  box-shadow: 0 0 0 2px var(--blue);
+}
+
+.ghosts {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.ghost {
+  position: absolute;
+  min-height: 0;
+  padding: 0;
+  border: 2px dashed var(--bad);
+  border-radius: 9px;
+  background: rgb(255 255 255 / 0.55);
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+.ghost:hover:not(:disabled) {
+  background: rgb(255 255 255 / 0.75);
+  color: var(--ink);
+}
+
+.ghost.selected {
+  outline: 3px solid var(--blue);
+  outline-offset: 2px;
+}
+
+.ghost .tag {
+  opacity: 1;
+  border-color: var(--bad);
+  color: var(--bad);
+}
+
+.area-chip {
+  border-color: var(--blue);
+  color: var(--blue);
+}
+
+.area-chip:hover:not(:disabled) {
+  background: var(--blue);
+  border-color: var(--blue);
+}
+
+.hatch-key {
+  display: inline-block;
+  width: 14px;
+  height: 10px;
+  background-color: #fff;
+  background-image: repeating-linear-gradient(45deg, rgb(29 78 216 / 0.5) 0 2px, transparent 2px 5px);
+  outline: 1.5px solid currentColor;
+}
+
+.edges-on {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  margin-bottom: 12px;
+  padding: 8px 12px;
+  border: 2px dashed var(--ink);
+  border-radius: var(--radius);
+  background: var(--sheet);
+}
+
+.edges-on > span:nth-child(2) {
+  flex: 1 1 300px;
+}
+
+.badge {
+  padding: 2px 7px;
+  border-radius: 5px;
+  background: var(--ink);
+  color: var(--on-ink);
+  word-break: normal;
+}
+
+.broken {
+  margin-top: 14px;
+  padding: 14px 18px 6px;
+  border-color: var(--bad);
+}
+
+.broken-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 12px;
+}
+
+.broken h3 {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--t17);
+  color: var(--bad);
+}
+
+.broken ul {
+  list-style: none;
+  padding: 0;
+  margin-top: 6px;
+}
+
+.broken li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  padding: 10px 0;
+}
+
+.broken li + li {
+  border-top: 2px dotted var(--ink);
+}
+
+.kind-tag {
+  font-size: var(--t12);
+  font-weight: 700;
+  line-height: 16px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--blue);
+  color: #fff;
+}
+
+.b-text {
+  flex: 1 1 240px;
+  min-width: 0;
+}
+
+.b-name {
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.b-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.doesnt-fit {
+  flex-direction: column;
+  gap: 8px;
+}
+
+.doesnt-fit p:first-child {
+  display: flex;
+  gap: 8px;
+}
+
+.doesnt-fit p.small {
+  color: var(--ink);
+  font-weight: 400;
+}
+
+.doesnt-fit .row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 @media (max-width: 1080px) {

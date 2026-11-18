@@ -99,11 +99,13 @@ Sent right after connecting and then every 60 s:
 
 The server shows these values on the device's page in the UI.
 
+Frames always cover the whole panel. When the user makes the display area smaller ([D-021](decisions.md#d-021)), the server draws the white margin into the frame itself; the device knows nothing about it.
+
 ## When the server sends what
 
 Settings are in `devicehub.Settings`. Some can be changed with environment variables, see the server README section.
 
-- A re-render happens when an entity used by the layout changes, the layout is saved, or on every wall-clock minute boundary (for clock widgets).
+- A re-render happens when an entity used by the layout changes, the layout or the display area is saved, or on every wall-clock minute boundary (for clock widgets).
 - It waits for a **debounce** of 1 s, and keeps at least **3 s** between frames (`HOMEPAPER_MIN_INTERVAL`).
 - If the new frame is identical to what the device shows, **nothing is sent**.
 - Otherwise the changed rows are grouped into bands, and each band becomes one byte-aligned region (see `frame.Diff`).

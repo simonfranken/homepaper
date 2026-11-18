@@ -32,6 +32,7 @@ When an item changes status, update it here (status, date, rationale) and in the
 | [D-018](#d-018) | Grey mode: 2bpp frames with hybrid refresh, optional per display | Decided, implemented |
 | [D-019](#d-019) | Semantic versioning from a VERSION file; unique image tag per main push | Decided, implemented |
 | [D-020](#d-020) | Hardware: route A, HAT kit (SKU 13504) + the owner's ESP32-S3 | Decided |
+| [D-021](#d-021) | Display area smaller than the panel, with a margin and a minimum cell size | Decided, implemented (cell size still proposed) |
 | [P-001](#p-001) | ~~Server stack: TypeScript / Node~~ | Superseded by D-009, D-010 |
 | [P-002](#p-002) | ~~Renderer: Satori + resvg~~ | Superseded by D-011 |
 | [P-003](#p-003) | Layout model: snap grid (e.g. 8×6) | Proposed |
@@ -172,6 +173,16 @@ Built on the 8 × 6 grid, which is still [P-003](#p-003). Details and mockups in
 **Hardware: route A**, the Waveshare 7.5" e-Paper HAT kit (SKU 13504) wired to the owner's ESP32-S3 dev board (2026-11-18). The owner chose to buy the HAT kit from Eckstein ([link](https://eckstein-shop.de/WaveShare800C3974802C75inchE-InkdisplayHATforRaspberryPi)). See [hardware.md](hardware.md#route-a-hat-kit--esp32-s3-dev-board).
 - Why: the owner's S3 board has 8 MB PSRAM (read from its efuses), so the 96 KB buffers of [D-018](#d-018) fit easily. Route B's driver board probably has no PSRAM and is a different chip (ESP32, its own build target).
 - Later: to get rid of the jumper wires in the final frame, the panel can move to route B's driver board, or the S3 can be replaced by a smaller S3 board with soldered wires. The second keeps PSRAM and the firmware target.
+
+### D-021
+**Display area smaller than the panel, with a white margin** (2026-11-18). The panel's aspect ratio may not match the opening of the picture frame, so the user can shrink the area homepaper draws on. Plan: [plans/viewport.md](plans/viewport.md). The project owner decided:
+- **Default and limits:** the area is the full resolution the device reports in `hello`, and can only be made smaller.
+- **Placement:** centered, with an optional X/Y offset.
+- **Grid:** the layout's grid stays 8 × 6. The user can't change it. Cells shrink with the area, and when a cell would fall below a minimum size, a whole column or row is dropped.
+- **Widgets that no longer fit** aren't drawn but stay stored. The editor shows them as broken so the user can place, edit or delete them. They return when the area grows again.
+- **Device side unchanged:** the server draws the margin into full-panel frames, so there's no protocol change.
+- *Still open:* the minimum cell size (suggested 80 × 64 px against today's 100 × 80) and whether the width is rounded to a multiple of 8.
+- **Implemented 2026-11-18** (server 0.2.0), building on the *suggested* minimum cell size of 80 × 64 px (`render.MinCellW/H`, one place to change). For now the width is **not** rounded (still open): any width from one cell to the panel is accepted, and the editor's −/+ buttons step by 8 px. The editor design is the canvas "Display area editor"; the setting lives in the Display tab, and a calibration switch draws a 1 px line around the area on the panel.
 
 ## Proposed
 

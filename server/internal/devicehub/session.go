@@ -132,7 +132,7 @@ func (s *session) update(ctx context.Context) error {
 		return err
 	}
 	s.refs.Store(ReferencedEntities(dev.Layout))
-	next := render.Render(dev.Layout, dev.Panel, s.hub.States, time.Now().In(s.hub.Settings.Location))
+	next := render.RenderIn(dev.Layout, dev.Panel, dev.Viewport, s.hub.States, time.Now().In(s.hub.Settings.Location))
 
 	regions := frame.Diff(s.shown, next)
 	if len(regions) == 0 {

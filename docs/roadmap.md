@@ -11,6 +11,8 @@ Built and tested **without a panel**:
 - **Protocol:** verified end to end with `server/cmd/fakedevice`.
 - **Grey mode (2026-11-18):** 2bpp frames with hybrid refresh, optional per display ([D-018](decisions.md#d-018)). Verified with `fakedevice` (grey changes go out as full frames, routine updates as partial ones); the editor toggle and the live preview's 2bpp decoding are not yet checked in a browser, and nothing is tested on the panel.
 
+- **Display area (2026-11-18):** a smaller drawn area with a white margin, an effective grid and broken widgets ([D-021](decisions.md#d-021)). Tested with unit tests, `fakedevice` and headless Chromium (resize, offset, Place, edge line on and off); not on the panel.
+
 - **Design (2026-11-16):** the panel redesign ([D-015](decisions.md#d-015)) is rendered, with daily forecasts from Home Assistant. The web UI follows the shared design language ([D-014](decisions.md#d-014)). Tested with demo data, `fakedevice` and headless Chromium.
 
 Next: flash the S3 and check the connection and setup on real hardware, then order the panel ([P-008](decisions.md#p-008)) and write the panel driver (the rest of M0, then M1).

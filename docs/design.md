@@ -32,7 +32,7 @@ The structure stays as built (header with display tabs, Layout/Display switch, e
 
 - **Header:** display tabs with status dots, "Add display", the Home Assistant status in three states (demo, connected with the entity count, unreachable; not clickable since [D-016](decisions.md#d-016)), and the logged-in user with "Log out".
 - **Layout view:**
-  - The preview sits in a black bezel (a picture frame), with the 8 × 6 grid as blue guides while a widget is moved or resized.
+  - The preview sits in a black bezel (a picture frame), with the effective grid (8 × 6 on the full panel) as blue guides while a widget is moved or resized.
   - Widgets get blue kind tags. The selected one has a blue outline and a resize handle.
   - Problems get a dashed red outline and a red flag ("Choose an entity", "Entity not found").
   - The title row shows the status and the time of the last frame.
@@ -47,6 +47,10 @@ The structure stays as built (header with display tabs, Layout/Display switch, e
 - **Dividers:** a Rules/Frames switch in the editor toolbar sets the layout's dividers ([D-015](decisions.md#d-015)). The design canvas had no place for it; the toolbar is the implementation's choice.
 - **Light only:** the old editor followed the system's dark mode. The design is ink on paper and has no dark variant, so the restyled UI is light only.
 - **Display tab:** numbered setup steps, the values to enter by hand (with Copy and Show), a status card with details, and Manage (rename, replace token, delete) with inline confirmation.
+- **Display area ([D-021](decisions.md#d-021)):** designed on the canvas "Display area editor".
+  - Display tab: a "Display area" card (above the setup steps once the display has connected) with a small bezel picture, the margin hatched in editor blue and the cells dotted; width and height with −/+ steppers (8 px) and "Full panel"; horizontal and vertical offsets (2 px) and "Center"; mm next to the px when the panel's pitch is known; a dashed note when the grid loses columns or rows, with the number of widgets that no longer fit. Values are checked as typed, and nothing changes on the panel until "Apply to the display" (one full refresh). A switch draws a 1 px edge line on the panel for calibration.
+  - Layout view: the preview still shows the whole panel; the margin is hatched in editor blue, the grid guides cover only the area, and a blue chip in the toolbar ("Area 600 × 432 · 7 × 6 cells") leads to the Display tab. While the edge line is on, a dashed banner offers "Turn off".
+  - Broken widgets: a red dashed outline with a "Doesn't fit" flag where the widget would sit (often over the margin), a red-bordered "Doesn't fit at this display size" list under the preview with Place, Edit and Delete, and a red notice in the inspector with the reason and Place. The editor has no separate widget list, so the plan's "mark them in the widget list" is covered by the outline and the list.
 - **Dialogs:** Add display. The Home Assistant dialog of the canvas was dropped with [D-016](decisions.md#d-016). The login pages (logged out, no access, login failed) use the same card and hard shadow.
 
 ## Panel (D-015)

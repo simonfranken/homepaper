@@ -4,9 +4,10 @@
 import { computed, ref, watch } from 'vue'
 import { ago, api, deviceUrl, hasConnected, isLoopback, setupLink, SETUP_PORTAL, SETUP_SSID, type Device } from '../api'
 import Icon from './Icon.vue'
+import DisplayArea from './DisplayArea.vue'
 
 const props = defineProps<{ device: Device }>()
-const emit = defineEmits<{ updated: [d: Device]; deleted: [id: string] }>()
+const emit = defineEmits<{ updated: [d: Device]; deleted: [id: string]; openLayout: [] }>()
 
 const s = computed(() => props.device.status)
 const everConnected = computed(() => hasConnected(props.device))
@@ -120,104 +121,112 @@ const remove = () =>
 
 <template>
   <div class="view">
-    <section class="card setup" aria-labelledby="setup-h">
-      <details :open="!everConnected">
-        <summary>
-          <h2 id="setup-h">{{ everConnected ? 'Set it up again' : 'Connect the display' }}</h2>
-          <p class="muted">Four steps, about two minutes. You need a phone or laptop with Wi-Fi.</p>
-        </summary>
-        <ol class="steps">
-          <li>
-            <span class="num" aria-hidden="true">1</span>
-            <div>
-              <p class="lead">Power the display. A new display opens the Wi-Fi network <b>{{ SETUP_SSID }}</b>.</p>
-              <p class="small muted">One that was set up before does so after you hold its BOOT button for 3 seconds while it runs.</p>
-            </div>
-          </li>
-          <li>
-            <span class="num" aria-hidden="true">2</span>
-            <div>
-              <label for="host" class="lead plain">Check the address the display should reach this server at.</label>
-              <input
-                id="host"
-                v-model="host"
-                class="host"
-                :class="{ bad: loopback }"
-                spellcheck="false"
-                autocomplete="off"
-                :placeholder="pageHost"
-              />
-              <p v-if="loopback" class="notice">
-                <Icon name="warn" :size="18" />
-                <span>
-                  <b>{{ hostValue }}</b> only works on this computer. Enter the server's address on your network instead,
-                  for example 192.168.1.10:8080.
-                </span>
-              </p>
-              <p v-else class="small muted">The display connects to <span class="mono ink">{{ serverUrl }}</span></p>
-            </div>
-          </li>
-          <li>
-            <span class="num" aria-hidden="true">3</span>
-            <div>
-              <p class="lead">
-                Join <b>{{ SETUP_SSID }}</b> with this computer or phone, then open the setup page. It arrives filled in;
-                you only choose your Wi-Fi.
-              </p>
-              <p class="small muted">This page stops loading while you're on that network. That's expected.</p>
-              <div v-if="!loopback" class="row">
-                <a class="button primary" :href="link" target="_blank" rel="noopener">
-                  Open the setup page
-                  <Icon name="external" :size="14" :stroke="3" />
-                </a>
-                <button @click="copy('link', link)">
-                  <Icon :name="copied === 'link' ? 'check' : 'copy'" :size="14" />
-                  {{ copied === 'link' ? 'Copied' : 'Copy its link' }}
-                </button>
-              </div>
-              <div v-else class="row">
-                <button class="primary" disabled>Open the setup page</button>
-                <span class="small muted">Enter a network address in step 2 first.</span>
-              </div>
-            </div>
-          </li>
-          <li>
-            <span class="num" aria-hidden="true">4</span>
-            <div>
-              <p class="lead">Save there. The display restarts, joins your Wi-Fi and shows up here as online.</p>
-            </div>
-          </li>
-        </ol>
-
-        <details class="manual">
+    <div class="main">
+      <section class="card setup" aria-labelledby="setup-h">
+        <details :open="!everConnected">
           <summary>
-            <Icon name="chevron" :size="14" :stroke="3" />
-            Enter the values by hand
+            <h2 id="setup-h">{{ everConnected ? 'Set it up again' : 'Connect the display' }}</h2>
+            <p class="muted">Four steps, about two minutes. You need a phone or laptop with Wi-Fi.</p>
           </summary>
-          <div class="manual-body">
-            <p class="small muted">Open <span class="mono ink">{{ SETUP_PORTAL }}</span> on the setup network and type these in.</p>
-            <dl class="values">
-              <dt>Server URL</dt>
-              <dd>
-                <span class="mono ink">{{ serverUrl }}</span>
-                <button class="small" @click="copy('url', serverUrl)">{{ copied === 'url' ? 'Copied' : 'Copy' }}</button>
-              </dd>
-              <dt>Device ID</dt>
-              <dd>
-                <span class="mono ink">{{ device.id }}</span>
-                <button class="small" @click="copy('id', device.id)">{{ copied === 'id' ? 'Copied' : 'Copy' }}</button>
-              </dd>
-              <dt>Token</dt>
-              <dd>
-                <span class="mono ink">{{ showToken ? device.token : '•'.repeat(16) }}</span>
-                <button class="small" @click="showToken = !showToken">{{ showToken ? 'Hide' : 'Show' }}</button>
-                <button class="small" @click="copy('token', device.token)">{{ copied === 'token' ? 'Copied' : 'Copy' }}</button>
-              </dd>
-            </dl>
-          </div>
+          <ol class="steps">
+            <li>
+              <span class="num" aria-hidden="true">1</span>
+              <div>
+                <p class="lead">Power the display. A new display opens the Wi-Fi network <b>{{ SETUP_SSID }}</b>.</p>
+                <p class="small muted">One that was set up before does so after you hold its BOOT button for 3 seconds while it runs.</p>
+              </div>
+            </li>
+            <li>
+              <span class="num" aria-hidden="true">2</span>
+              <div>
+                <label for="host" class="lead plain">Check the address the display should reach this server at.</label>
+                <input
+                  id="host"
+                  v-model="host"
+                  class="host"
+                  :class="{ bad: loopback }"
+                  spellcheck="false"
+                  autocomplete="off"
+                  :placeholder="pageHost"
+                />
+                <p v-if="loopback" class="notice">
+                  <Icon name="warn" :size="18" />
+                  <span>
+                    <b>{{ hostValue }}</b> only works on this computer. Enter the server's address on your network instead,
+                    for example 192.168.1.10:8080.
+                  </span>
+                </p>
+                <p v-else class="small muted">The display connects to <span class="mono ink">{{ serverUrl }}</span></p>
+              </div>
+            </li>
+            <li>
+              <span class="num" aria-hidden="true">3</span>
+              <div>
+                <p class="lead">
+                  Join <b>{{ SETUP_SSID }}</b> with this computer or phone, then open the setup page. It arrives filled in;
+                  you only choose your Wi-Fi.
+                </p>
+                <p class="small muted">This page stops loading while you're on that network. That's expected.</p>
+                <div v-if="!loopback" class="row">
+                  <a class="button primary" :href="link" target="_blank" rel="noopener">
+                    Open the setup page
+                    <Icon name="external" :size="14" :stroke="3" />
+                  </a>
+                  <button @click="copy('link', link)">
+                    <Icon :name="copied === 'link' ? 'check' : 'copy'" :size="14" />
+                    {{ copied === 'link' ? 'Copied' : 'Copy its link' }}
+                  </button>
+                </div>
+                <div v-else class="row">
+                  <button class="primary" disabled>Open the setup page</button>
+                  <span class="small muted">Enter a network address in step 2 first.</span>
+                </div>
+              </div>
+            </li>
+            <li>
+              <span class="num" aria-hidden="true">4</span>
+              <div>
+                <p class="lead">Save there. The display restarts, joins your Wi-Fi and shows up here as online.</p>
+              </div>
+            </li>
+          </ol>
+
+          <details class="manual">
+            <summary>
+              <Icon name="chevron" :size="14" :stroke="3" />
+              Enter the values by hand
+            </summary>
+            <div class="manual-body">
+              <p class="small muted">Open <span class="mono ink">{{ SETUP_PORTAL }}</span> on the setup network and type these in.</p>
+              <dl class="values">
+                <dt>Server URL</dt>
+                <dd>
+                  <span class="mono ink">{{ serverUrl }}</span>
+                  <button class="small" @click="copy('url', serverUrl)">{{ copied === 'url' ? 'Copied' : 'Copy' }}</button>
+                </dd>
+                <dt>Device ID</dt>
+                <dd>
+                  <span class="mono ink">{{ device.id }}</span>
+                  <button class="small" @click="copy('id', device.id)">{{ copied === 'id' ? 'Copied' : 'Copy' }}</button>
+                </dd>
+                <dt>Token</dt>
+                <dd>
+                  <span class="mono ink">{{ showToken ? device.token : '•'.repeat(16) }}</span>
+                  <button class="small" @click="showToken = !showToken">{{ showToken ? 'Hide' : 'Show' }}</button>
+                  <button class="small" @click="copy('token', device.token)">{{ copied === 'token' ? 'Copied' : 'Copy' }}</button>
+                </dd>
+              </dl>
+            </div>
+          </details>
         </details>
-      </details>
-    </section>
+      </section>
+      <DisplayArea
+        :device="device"
+        :class="{ first: everConnected }"
+        @updated="(d) => emit('updated', d)"
+        @layout="emit('openLayout')"
+      />
+    </div>
 
     <aside class="side">
       <section class="card status" aria-labelledby="status-h">
@@ -233,6 +242,13 @@ const remove = () =>
             <dd class="mono">{{ s.firmware || '–' }}</dd>
             <dt>Panel</dt>
             <dd class="mono">{{ s.panel || `${device.panel.model} ${device.panel.width}×${device.panel.height}` }}</dd>
+            <dt>Drawn area</dt>
+            <dd class="mono">
+              {{ device.area.w }}×{{ device.area.h }} at {{ device.area.x }}, {{ device.area.y }} · {{ device.grid.cols }}×{{
+                device.grid.rows
+              }}
+              cells
+            </dd>
             <dt>Address</dt>
             <dd class="mono">{{ s.remote || '–' }}</dd>
             <dt>Wi-Fi signal</dt>
@@ -302,10 +318,18 @@ const remove = () =>
   align-items: flex-start;
 }
 
-.setup {
+.main {
   flex: 999 1 560px;
   min-width: 0;
   max-width: 860px;
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+
+/* Once the display is set up, its display area matters more than the steps. */
+.main > .first {
+  order: -1;
 }
 
 .setup > details > summary {

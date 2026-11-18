@@ -22,15 +22,58 @@ const threshold = 128
 
 var mu sync.Mutex
 
-// Render draws a layout for a panel. It is safe for concurrent callers.
+// Minimum cell size (D-021). When the display area is too small for the
+// layout's grid at this size, the effective grid drops whole columns or
+// rows instead of shrinking cells further.
+const MinCellW, MinCellH = 80, 64
+
+// Grid returns the effective grid of a layout drawn into area: the layout's
+// columns and rows, reduced to what fits at the minimum cell size. Grid and
+// Fits are the only place this rule lives; the API hands the result to the
+// editor.
+func Grid(layout store.Layout, area image.Rectangle) (cols, rows int) {
+	cols = min(max(area.Dx()/MinCellW, 1), max(layout.Cols, 1))
+	rows = min(max(area.Dy()/MinCellH, 1), max(layout.Rows, 1))
+	return cols, rows
+}
+
+// Fits reports whether a widget lies inside an effective grid. Widgets that
+// don't fit aren't drawn, but stay stored (D-021).
+func Fits(wg store.Widget, cols, rows int) bool {
+	return wg.X >= 0 && wg.Y >= 0 && wg.X+wg.W <= cols && wg.Y+wg.H <= rows
+}
+
+// Broken returns the IDs of the widgets that don't fit the effective grid.
+func Broken(layout store.Layout, area image.Rectangle) []string {
+	cols, rows := Grid(layout, area)
+	out := []string{}
+	for _, wg := range layout.Widgets {
+		if !Fits(wg, cols, rows) {
+			out = append(out, wg.ID)
+		}
+	}
+	return out
+}
+
+// Render draws a layout for the full panel. It is safe for concurrent callers.
 func Render(layout store.Layout, panel store.Panel, states *ha.Store, now time.Time) *frame.Bitmap {
+	return RenderIn(layout, panel, store.Viewport{}, states, now)
+}
+
+// RenderIn draws a layout into the panel's display area (D-021). The layout
+// is drawn exactly as on a panel the size of the area, then placed on a
+// white full-panel image, so frames always cover the whole panel and the
+// margin never shows up in a diff. It is safe for concurrent callers.
+func RenderIn(layout store.Layout, panel store.Panel, vp store.Viewport, states *ha.Store, now time.Time) *frame.Bitmap {
 	mu.Lock()
 	defer mu.Unlock()
 
-	w, h := panel.Width, panel.Height
-	if w <= 0 || h <= 0 {
-		w, h = store.DefaultPanel.Width, store.DefaultPanel.Height
+	pw, ph := panel.Width, panel.Height
+	if pw <= 0 || ph <= 0 {
+		pw, ph = store.DefaultPanel.Width, store.DefaultPanel.Height
 	}
+	area := vp.Area(panel)
+	w, h := area.Dx(), area.Dy()
 	dc := gg.NewContext(w, h)
 	dc.SetColor(color.White)
 	dc.Clear()
@@ -50,7 +93,7 @@ func Render(layout store.Layout, panel store.Panel, states *ha.Store, now time.T
 		}
 	}
 
-	cols, rows := max(layout.Cols, 1), max(layout.Rows, 1)
+	cols, rows := Grid(layout, area)
 	cw, ch := float64(w)/float64(cols), float64(h)/float64(rows)
 	frames := layout.Dividers == store.DividersFrames
 	type placed struct {
@@ -60,11 +103,11 @@ func Render(layout store.Layout, panel store.Panel, states *ha.Store, now time.T
 	var drawn []placed
 	for _, wg := range layout.Widgets {
 		k, ok := kinds[wg.Kind]
-		if !ok {
+		if !ok || !Fits(wg, cols, rows) {
 			continue
 		}
 		// Whole-pixel cell edges, so frames and text sit on the grid even
-		// when the panel size isn't a multiple of the cell count.
+		// when the area size isn't a multiple of the cell count.
 		x0, y0 := int(math.Round(float64(wg.X)*cw)), int(math.Round(float64(wg.Y)*ch))
 		x1, y1 := int(math.Round(float64(wg.X+wg.W)*cw)), int(math.Round(float64(wg.Y+wg.H)*ch))
 		r := R{x0, y0, x1 - x0, y1 - y0}
@@ -111,25 +154,48 @@ func Render(layout store.Layout, panel store.Panel, states *ha.Store, now time.T
 		})
 	}
 
-	gray := image.NewGray(image.Rect(0, 0, w, h))
-	draw.Draw(gray, gray.Bounds(), dc.Image(), image.Point{}, draw.Src)
+	// Place the area on a white full-panel image.
+	onPanel := func(src image.Image) *image.Gray {
+		g := image.NewGray(image.Rect(0, 0, pw, ph))
+		for i := range g.Pix {
+			g.Pix[i] = 0xFF
+		}
+		draw.Draw(g, area, src, image.Point{}, draw.Src)
+		return g
+	}
+	gray := onPanel(dc.Image())
+	if vp.Edges {
+		edges(gray, area)
+	}
+	var layers [3]*image.Gray
+	if tones != nil {
+		for _, t := range []int{toneDark, toneLight} {
+			layers[t] = onPanel(tones[t].Image())
+		}
+	}
 	if depth == 1 {
 		return frame.FromGray(gray, threshold)
 	}
-	return frame.FromLevels(compose(gray, tones))
+	return frame.FromLevels(compose(gray, layers))
+}
+
+// edges draws a 1 px black line on the area's outermost pixels, for lining
+// the area up with the frame's opening.
+func edges(g *image.Gray, r image.Rectangle) {
+	for x := r.Min.X; x < r.Max.X; x++ {
+		g.SetGray(x, r.Min.Y, color.Gray{0})
+		g.SetGray(x, r.Max.Y-1, color.Gray{0})
+	}
+	for y := r.Min.Y; y < r.Max.Y; y++ {
+		g.SetGray(r.Min.X, y, color.Gray{0})
+		g.SetGray(r.Max.X-1, y, color.Gray{0})
+	}
 }
 
 // compose turns the ink canvas and the grey layers into exact levels: black
 // ink wins, then dark grey, then light grey, else white. Each layer is
 // thresholded on its own, so anti-aliased edges never turn grey.
-func compose(ink *image.Gray, tones *[3]*gg.Context) *image.Gray {
-	var layers [3]*image.Gray
-	if tones != nil {
-		for _, t := range []int{toneDark, toneLight} {
-			layers[t] = image.NewGray(ink.Bounds())
-			draw.Draw(layers[t], ink.Bounds(), tones[t].Image(), image.Point{}, draw.Src)
-		}
-	}
+func compose(ink *image.Gray, layers [3]*image.Gray) *image.Gray {
 	out := image.NewGray(ink.Bounds())
 	for i, v := range ink.Pix {
 		switch {

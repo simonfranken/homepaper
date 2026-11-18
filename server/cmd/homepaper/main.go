@@ -58,6 +58,11 @@ func loadDotEnv(path string) (bool, error) {
 	return true, nil
 }
 
+// version is set at build time from the VERSION file, e.g.
+// -ldflags "-X main.version=0.1.0-build.42.g1a2b3c4" (see Makefile and
+// Dockerfile). A plain "go build" reports "dev".
+var version = "dev"
+
 func main() {
 	envFile := env("HOMEPAPER_ENV_FILE", ".env")
 	loaded, envErr := loadDotEnv(envFile)
@@ -71,6 +76,7 @@ func main() {
 		log.Error("cannot read env file", "file", envFile, "err", envErr)
 		os.Exit(1)
 	}
+	log.Info("homepaper", "version", version)
 	if loaded {
 		log.Info("loaded settings", "file", envFile)
 	}
@@ -150,7 +156,7 @@ func run(log *slog.Logger) error {
 	}
 	hub := devicehub.New(st, states, log, settings)
 
-	a := &api.API{Store: st, States: states, Hub: hub, Log: log, Web: web.Dist(), Location: time.Local,
+	a := &api.API{Version: version, Store: st, States: states, Hub: hub, Log: log, Web: web.Dist(), Location: time.Local,
 		HA: manager, HAURL: haURL, HAToken: haToken, Auth: auth}
 	a.StartHA()
 	srv := &http.Server{Addr: listen, Handler: a.Handler(), ReadHeaderTimeout: 10 * time.Second}

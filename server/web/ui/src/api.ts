@@ -90,6 +90,8 @@ export interface ServerStatus {
   connected: boolean
   error?: string
   entities: number
+  /** Server version, e.g. "0.1.0-build.42.g1a2b3c4", or "dev". */
+  version: string
 }
 
 // Who is logged in. auth is false when the server runs with

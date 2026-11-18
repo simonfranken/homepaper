@@ -30,6 +30,7 @@ When an item changes status, update it here (status, date, rationale) and in the
 | [D-016](#d-016) | Login only via Home Assistant; one global HA connection from the environment | Decided, implemented |
 | [D-017](#d-017) | Login details: shared displays, admins only by default, auth off only for development | Decided, implemented |
 | [D-018](#d-018) | Grey mode: 2bpp frames with hybrid refresh, optional per display | Decided, implemented |
+| [D-019](#d-019) | Semantic versioning from a VERSION file; unique image tag per main push | Decided, implemented |
 | [P-001](#p-001) | ~~Server stack: TypeScript / Node~~ | Superseded by D-009, D-010 |
 | [P-002](#p-002) | ~~Renderer: Satori + resvg~~ | Superseded by D-011 |
 | [P-003](#p-003) | Layout model: snap grid (e.g. 8×6) | Proposed |
@@ -157,6 +158,14 @@ Built on the 8 × 6 grid, which is still [P-003](#p-003). Details and mockups in
 - **Design rule:** grey only for pixels that don't change with entity state or time: labels, rules and frames, the clock and thermostat dividers, the date, forecast days, weather icon bodies, small fixed icons. Values, units, state words and icons, meters and alert plates stay black. An alert widget turning black or back is the one routine change that costs a full refresh. See [design.md](design.md#panel-in-4-greys-d-018).
 - **Optional:** a per-layout switch (`Layout.Greys`, "Colours: Black/white | 4 greys" in the editor toolbar), off by default. It has no effect on 1bpp panels. With it off, a 2bpp panel gets pure black/white frames.
 - **Not verified on hardware:** that a black/white partial refresh leaves the greys elsewhere on the panel intact, and that two 96 KB buffers (framebuffer and WebSocket receive buffer) fit the ESP32-S3's internal RAM next to Wi-Fi and TLS. The panel driver isn't written yet (`NullPanel`).
+
+### D-019
+**Semantic versioning from a `VERSION` file; a unique image tag per push to main** (2026-11-18). The project owner asked for semver, bumped by hand, with the pipeline tagging images from it plus a build number.
+- **Source:** the `VERSION` file at the repository root (`MAJOR.MINOR.PATCH`), chosen over git tags: the version is visible and reviewable in the diff that changes it, local builds read it without fetching tags, and CI needs no write access to the repository. CI fails if it isn't a valid semver.
+- **Build number:** `<version>-build.<n>.g<hash>`, where `n` is `git rev-list --count HEAD` and `hash` the 7-character commit hash. The count keeps builds ordered (and valid semver precedence within a version), the hash names the commit, and the `g` prefix keeps an all-digit hash a valid semver identifier. Semver build metadata (`+…`) isn't used because Docker tags can't contain `+`.
+- **Image tags on main:** the full build tag (never moves), plus `<version>`, `<major>.<minor>` and `latest` (move to the newest build). See the README.
+- **In the binary:** `-ldflags -X main.version=…`, logged at startup and returned by `GET /api/status`. Local builds use `<version>-dev.g<hash>`.
+- The firmware keeps its own version in `firmware/Cargo.toml` for now.
 
 ## Proposed
 

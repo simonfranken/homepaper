@@ -44,6 +44,10 @@ espflash save-image --chip esp32s3 --flash-size 4mb target/xtensa-esp32s3-espidf
 espflash flash --monitor target/xtensa-esp32s3-espidf/release/homepaper-fw   # needs the board attached
 ```
 
+## Versioning
+
+- The server version is semver in `VERSION` (D-019), bumped by hand in the commit that ships the change. Bump MAJOR for incompatible changes (device protocol, stored data), MINOR for features, PATCH for fixes. CI tags images `<version>-build.<commits>.g<hash>` plus `<version>`, `<major>.<minor>` and `latest`.
+
 ## Gotchas
 
 - **Never run `cargo run` or `cargo test` in `firmware/`.** The cargo runner flashes attached hardware. Use `cargo build`.

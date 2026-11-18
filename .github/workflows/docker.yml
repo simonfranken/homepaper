@@ -3,10 +3,9 @@ name: Docker image
 on:
   push:
     branches: [main]
-    tags: ['v*']
-    paths: ['server/**', '.github/workflows/docker.yml']
+    paths: ['server/**', 'VERSION', '.github/workflows/docker.yml']
   pull_request:
-    paths: ['server/**', '.github/workflows/docker.yml']
+    paths: ['server/**', 'VERSION', '.github/workflows/docker.yml']
   workflow_dispatch:
 
 concurrency:
@@ -14,6 +13,35 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # The version comes from the VERSION file (semver, bumped by hand). Each
+  # build adds the number of commits on the branch and the short commit hash:
+  # 0.1.0-build.42.g1a2b3c4. The count orders builds, the hash names the
+  # commit, so every push to main gets its own image tag.
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+      minor: ${{ steps.v.outputs.minor }}
+      full: ${{ steps.v.outputs.full }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # the build number counts commits
+      - id: v
+        run: |
+          version=$(tr -d '[:space:]' < VERSION)
+          if ! [[ $version =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            echo "::error file=VERSION::'$version' is not a semantic version (MAJOR.MINOR.PATCH)"
+            exit 1
+          fi
+          build=$(git rev-list --count HEAD)
+          sha=$(git rev-parse --short=7 HEAD)
+          full="$version-build.$build.g$sha"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "minor=${version%.*}" >> "$GITHUB_OUTPUT"
+          echo "full=$full" >> "$GITHUB_OUTPUT"
+          echo "### Version \`$full\`" >> "$GITHUB_STEP_SUMMARY"
+
   test:
     runs-on: ubuntu-latest
     defaults:
@@ -35,7 +63,7 @@ jobs:
       - run: make test
 
   image:
-    needs: test
+    needs: [version, test]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -54,12 +82,17 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ghcr.io/${{ github.repository }}
+          # On main: the unique build tag, plus the version, MAJOR.MINOR and
+          # latest, which move to the newest build. Pull requests build
+          # without pushing.
           tags: |
+            type=raw,value=${{ needs.version.outputs.full }},enable=${{ github.event_name != 'pull_request' }}
+            type=raw,value=${{ needs.version.outputs.version }},enable={{is_default_branch}}
+            type=raw,value=${{ needs.version.outputs.minor }},enable={{is_default_branch}}
             type=raw,value=latest,enable={{is_default_branch}}
-            type=sha
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
             type=ref,event=pr
+          labels: |
+            org.opencontainers.image.version=${{ needs.version.outputs.full }}
       - uses: docker/build-push-action@v6
         with:
           context: server
@@ -67,5 +100,6 @@ jobs:
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          build-args: VERSION=${{ needs.version.outputs.full }}
           cache-from: type=gha
           cache-to: type=gha,mode=max

@@ -56,7 +56,18 @@ cd server && make docker
 docker run -d -p 8080:8080 -v homepaper-data:/data --env-file .env homepaper
 ```
 
-GitHub Actions (`.github/workflows/docker.yml`) runs `make test` and builds the image for `linux/amd64` and `linux/arm64`. Pushes to `main` publish `ghcr.io/simonfranken/homepaper:latest` (plus a `sha-…` tag), and `v*` tags publish versioned images. Pull requests only build. To use the published image:
+GitHub Actions (`.github/workflows/docker.yml`) runs `make test` and builds the image for `linux/amd64` and `linux/arm64`. Pull requests only build. Every push to `main` publishes `ghcr.io/simonfranken/homepaper` with these tags:
+
+| Tag | Example | Points to |
+|---|---|---|
+| version + build | `0.1.0-build.42.g1a2b3c4` | exactly this build, never moves |
+| version | `0.1.0` | the newest build of this version |
+| major.minor | `0.1` | the newest build of this minor version |
+| `latest` | `latest` | the newest build |
+
+**Versioning.** The version is [semver](https://semver.org) and lives in the `VERSION` file at the repository root. It is bumped by hand, in the commit that should carry the new version (MAJOR for incompatible changes, e.g. to the device protocol or stored data; MINOR for features; PATCH for fixes). The build part is the number of commits on `main` plus the short commit hash, so every push gets a unique, ordered tag. The server logs its version at startup and reports it in `GET /api/status`; local builds (`make build`, `make docker`) are tagged `<version>-dev.g<hash>`. The firmware has its own version in `firmware/Cargo.toml`.
+
+To use the published image (pin a full build tag for reproducible deployments):
 
 ```sh
 docker run -d -p 8080:8080 -v homepaper-data:/data --env-file .env ghcr.io/simonfranken/homepaper:latest

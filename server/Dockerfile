@@ -9,12 +9,14 @@ RUN npm run build
 
 FROM --platform=$BUILDPLATFORM golang:1.26-alpine AS build
 ARG TARGETOS TARGETARCH
+# The full version, e.g. 0.1.0-build.42.g1a2b3c4 (set by CI or make docker).
+ARG VERSION=dev
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
 COPY --from=web /src/web/dist ./web/dist
-RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -ldflags="-s -w" -o /homepaper ./cmd/homepaper
+RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o /homepaper ./cmd/homepaper
 
 FROM gcr.io/distroless/static-debian12:nonroot
 COPY --from=build /homepaper /homepaper

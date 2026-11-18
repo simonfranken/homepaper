@@ -35,6 +35,8 @@ type API struct {
 	// Auth is the login via Home Assistant; nil turns it off
 	// (HOMEPAPER_AUTH=off, development and demo only).
 	Auth *Auth
+	// Version is the server's version (see VERSION), shown in /api/status.
+	Version string
 
 	events *broadcaster
 
@@ -136,7 +138,10 @@ func writeErr(w http.ResponseWriter, err error) {
 }
 
 func (a *API) status(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, a.States.Status())
+	writeJSON(w, http.StatusOK, struct {
+		ha.Status
+		Version string `json:"version"`
+	}{a.States.Status(), a.Version})
 }
 
 func (a *API) font(w http.ResponseWriter, r *http.Request) {

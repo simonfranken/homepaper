@@ -12,6 +12,7 @@ export interface Field {
   choices?: { value: string; label: string }[]
   default?: unknown
   required?: boolean
+  labels_key?: string
 }
 
 export interface WidgetKind {

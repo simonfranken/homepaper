@@ -136,6 +136,20 @@ func (c *ctx) entityList(key string) []string {
 	return ids
 }
 
+// entityLabels reads the per-entity labels stored under key as lines of
+// "entity_id=Label". Entity IDs never contain "=", so the first one splits.
+func (c *ctx) entityLabels(key string) map[string]string {
+	m := map[string]string{}
+	v, _ := c.opts[key].(string)
+	for _, line := range strings.Split(v, "\n") {
+		id, label, ok := strings.Cut(line, "=")
+		if id, label = strings.TrimSpace(id), strings.TrimSpace(label); ok && id != "" && label != "" {
+			m[id] = label
+		}
+	}
+	return m
+}
+
 // canvas is the frame, clipped to the widget being drawn, so nothing can
 // spill into a neighbour.
 func (c *ctx) canvas() draw.Image {

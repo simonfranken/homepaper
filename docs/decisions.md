@@ -191,6 +191,11 @@ Built on the 8 × 6 grid, which is still [P-003](#p-003). Details and mockups in
 - **Implementation's choices (not confirmed separately):** the phone layout applies at 700 px wide and below. Dragging on the preview is off there, so a finger on the preview scrolls the page; the canvas's "long-press to drag" was dropped because the grid library has no long-press, and the buttons cover moving and resizing. Dividers and Colours move from the toolbar into an Options sheet. The header keeps the display tabs as a scrolling row instead of the canvas's display switcher. Inputs are set at 17 px on phones so iOS doesn't zoom on focus.
 - **Not taken from A:** "Full refresh now" would need a new protocol message and isn't part of this decision.
 
+### D-023
+**A label per entity in the State widget** (2026-11-19). With two or more entities the user can rename each row on the panel. The user confirmed the design (canvas "State Widget Per-Entity Labels").
+- **Decided:** a pencil on each row of the entity list opens a "Label on the display" field. Empty falls back to the Home Assistant name. Only the name changes, never the state word.
+- **Implementation's choices:** the labels are stored as one text option `labels`, lines of `entity_id=Label`, so options stay flat and old widgets keep working. A field declares it with `labels_key`. The renderer shortens long labels with an ellipsis, as it does for names. The State and Lights widgets use it; the editor offers it once a widget has two or more entities.
+
 ## Proposed
 
 These are recommended defaults. The project owner hasn't confirmed them yet.

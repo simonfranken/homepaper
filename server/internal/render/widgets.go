@@ -28,6 +28,10 @@ type Field struct {
 	Choices     []Choice  `json:"choices,omitempty"`
 	Default     any       `json:"default,omitempty"`
 	Required    bool      `json:"required,omitempty"`
+	// LabelsKey, on an entities field, names the option that holds a label
+	// per entity ("entity_id=Label", one per line). The editor then offers
+	// to rename each entity once there are several.
+	LabelsKey string `json:"labels_key,omitempty"`
 }
 
 // Kind is a widget kind as exposed to the editor.
@@ -117,7 +121,7 @@ func init() {
 		Name: "lights", Label: "Lights", Description: "Which lights are on, and how bright.",
 		MinW: 2, MinH: 1, DefaultW: 3, DefaultH: 2,
 		Fields: []Field{
-			{Key: "entities", Label: "Lights", Type: FieldEntities, Domains: []string{"light", "switch"}, Required: true},
+			{Key: "entities", Label: "Lights", Type: FieldEntities, Domains: []string{"light", "switch"}, Required: true, LabelsKey: "labels"},
 			{Key: "label", Label: "Heading", Type: FieldText, Placeholder: "None"},
 		},
 		render: renderLights,
@@ -128,7 +132,7 @@ func init() {
 		Fields: []Field{
 			// Stored under "entity" as a comma-separated list, so widgets
 			// saved with a single entity keep working.
-			{Key: "entity", Label: "Entities", Type: FieldEntities, Domains: []string{"binary_sensor", "switch", "input_boolean", "person", "light", "lock", "cover", "alarm_control_panel"}, Required: true,
+			{Key: "entity", Label: "Entities", Type: FieldEntities, Domains: []string{"binary_sensor", "switch", "input_boolean", "person", "light", "lock", "cover", "alarm_control_panel"}, Required: true, LabelsKey: "labels",
 				Help: "One entity shows large. Two or more show as a list, one row each."},
 			{Key: "label", Label: "Label", Type: FieldText, Placeholder: "Entity name; none for a list",
 				Help: "With several entities, a heading above the list."},

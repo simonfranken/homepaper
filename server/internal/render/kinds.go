@@ -457,12 +457,16 @@ func renderLights(c *ctx, r R) {
 		hasPct   bool
 	}
 	ls := make([]light, 0, len(ids))
+	labels := c.entityLabels("labels")
 	n := 0
 	for _, id := range ids {
 		e, ok := c.states.Get(id)
 		l := light{name: e.Name()}
 		if !ok {
 			l.name = id
+		}
+		if lbl := labels[id]; lbl != "" {
+			l.name = lbl
 		}
 		switch {
 		case !ok || e.State == "unavailable" || e.State == "unknown":
@@ -741,6 +745,7 @@ func renderStateList(c *ctx, r R, ids []string) {
 		px = 14
 	}
 	ink := c.ink
+	labels := c.entityLabels("labels")
 	prevAlert := false
 	for i, id := range ids {
 		y := r.Y + i*rowH
@@ -751,6 +756,9 @@ func renderStateList(c *ctx, r R, ids []string) {
 		name := e.Name()
 		if !ok {
 			name = id
+		}
+		if l := labels[id]; l != "" {
+			name = l
 		}
 		word, active, alert := unavailable, false, false
 		if ok && e.State != "unavailable" && e.State != "unknown" {

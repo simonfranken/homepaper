@@ -44,13 +44,43 @@ function list(key: string) {
 function addTo(key: string, id: string) {
   if (id && !list(key).includes(id)) set(key, [...list(key), id].join(', '))
 }
-function removeFrom(key: string, id: string) {
+function removeFrom(key: string, id: string, labelsKey?: string) {
+  if (labelsKey) setLabel(labelsKey, id, '')
   set(
     key,
     list(key)
       .filter((x) => x !== id)
       .join(', '),
   )
+}
+
+// Per-entity labels live in one option as "entity_id=Label" lines. Labels of
+// entities that were removed are dropped when the label is next written.
+function labels(key: string) {
+  const m: Record<string, string> = {}
+  str(key)
+    .split('\n')
+    .forEach((line) => {
+      const i = line.indexOf('=')
+      if (i > 0 && line.slice(i + 1).trim()) m[line.slice(0, i).trim()] = line.slice(i + 1).trim()
+    })
+  return m
+}
+function setLabel(key: string, id: string, label: string) {
+  const m = labels(key)
+  if (label.trim()) m[id] = label
+  else delete m[id]
+  set(
+    key,
+    Object.entries(m)
+      .map(([k, v]) => `${k}=${v}`)
+      .join('\n'),
+  )
+}
+// The label field of one row is open at a time.
+const editing = ref<string>()
+function toggleEdit(id: string) {
+  editing.value = editing.value === id ? undefined : id
 }
 function moveUp(key: string, i: number) {
   move(key, i, i - 1)
@@ -163,9 +193,22 @@ function entityName(id: string) {
             >
               <span class="grip" title="Drag to reorder"><Icon name="grip" :size="16" :stroke="3.5" /></span>
               <span class="name">
-                <span class="n">{{ entityName(id) ?? id }}</span>
+                <span class="n">{{ (f.labels_key && labels(f.labels_key)[id]) || entityName(id) || id }}</span>
                 <span class="id mono">{{ entityName(id) ? id : 'not found' }}</span>
               </span>
+              <span v-if="f.labels_key && labels(f.labels_key)[id]" class="tag">Renamed</span>
+              <button
+                v-if="f.labels_key && list(f.key).length > 1"
+                type="button"
+                class="quiet small icon"
+                :class="{ on: editing === id }"
+                :aria-label="`Edit label for ${entityName(id) ?? id}`"
+                :aria-expanded="editing === id"
+                title="Edit label"
+                @click="toggleEdit(id)"
+              >
+                <Icon name="edit" :size="14" :stroke="3" />
+              </button>
               <button
                 v-if="i > 0"
                 type="button"
@@ -181,10 +224,31 @@ function entityName(id: string) {
                 class="quiet small icon"
                 :aria-label="`Remove ${entityName(id) ?? id}`"
                 title="Remove"
-                @click="removeFrom(f.key, id)"
+                @click="removeFrom(f.key, id, f.labels_key)"
               >
                 <Icon name="close" :size="14" :stroke="3" />
               </button>
+              <div v-if="f.labels_key && list(f.key).length > 1 && editing === id" class="rename">
+                <label :for="`f-${f.key}-lbl-${i}`">Label on the display</label>
+                <div class="row">
+                  <input
+                    :id="`f-${f.key}-lbl-${i}`"
+                    type="text"
+                    autocomplete="off"
+                    :placeholder="entityName(id) ?? id"
+                    :value="labels(f.labels_key)[id] ?? ''"
+                    @input="setLabel(f.labels_key, id, ($event.target as HTMLInputElement).value)"
+                  />
+                  <button
+                    v-if="labels(f.labels_key)[id]"
+                    type="button"
+                    @click="setLabel(f.labels_key, id, '')"
+                  >
+                    Reset
+                  </button>
+                </div>
+                <p class="help">Empty uses the Home Assistant name. Only the label changes, never the state.</p>
+              </div>
             </li>
           </ul>
           <EntityPicker
@@ -339,6 +403,7 @@ function entityName(id: string) {
 
 .chosen li {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
   padding: 6px 4px 6px 6px;
@@ -386,6 +451,45 @@ function entityName(id: string) {
 .icon {
   width: 32px;
   padding: 0;
+}
+
+.icon.on {
+  background: var(--ink);
+  color: var(--on-ink);
+}
+
+.tag {
+  padding: 0 6px;
+  border: 2px solid var(--ink);
+  border-radius: 6px;
+  font-size: var(--t12);
+  font-weight: 700;
+}
+
+.rename {
+  flex-basis: 100%;
+  margin: 2px 4px 4px 28px;
+  padding: 10px;
+  border: 2px dotted var(--ink);
+  border-radius: var(--radius);
+  background: var(--paper);
+}
+
+.rename label {
+  display: block;
+  margin-bottom: 4px;
+  font-size: var(--t12);
+  font-weight: 700;
+}
+
+.rename .row {
+  display: flex;
+  gap: 8px;
+}
+
+.rename input {
+  flex: 1;
+  min-width: 0;
 }
 
 .stepper {

@@ -559,3 +559,11 @@ func TestGreyModeOffIsBlackWhite(t *testing.T) {
 		t.Fatal("a 1bpp panel must ignore grey mode and match the 2bpp black/white frame")
 	}
 }
+
+func TestEntityLabels(t *testing.T) {
+	c := &ctx{opts: map[string]any{"labels": "binary_sensor.a=Entrance\n\ncover.b = Garage = big \nbad\nlight.c="}}
+	got := c.entityLabels("labels")
+	if len(got) != 2 || got["binary_sensor.a"] != "Entrance" || got["cover.b"] != "Garage = big" {
+		t.Fatalf("labels = %v", got)
+	}
+}

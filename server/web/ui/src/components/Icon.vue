@@ -22,6 +22,7 @@ const icons: Record<string, { d: string; fill?: string }> = {
   actual: { d: 'M3 3h18v18H3zM8 9v7M12 9v.5M12 15v.5M16 9v7' },
   search: { d: 'M10.5 4a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13zM15.5 15.5l5 5' },
   close: { d: 'M6 6l12 12M18 6 6 18' },
+  edit: { d: 'M4 20l4-1 11-11-3-3L5 16z' },
   warn: { d: 'M12 3 2 21h20zM12 10v4M12 17.5v.5' },
   grip: { d: 'M9 6h.01M9 12h.01M9 18h.01M15 6h.01M15 12h.01M15 18h.01' },
   up: { d: 'm6 15 6-6 6 6' },
